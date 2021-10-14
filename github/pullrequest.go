@@ -65,7 +65,7 @@ func SortPullRequests(prs []*PullRequest, config *config.Config) []*PullRequest 
 		prs[j] = buf
 	}
 
-	targetBranch := "master"
+	targetBranch := config.Repo.GitHubBranch
 	j := 0
 	for i := 0; i < len(prs); i++ {
 		for j = i; j < len(prs); j++ {
