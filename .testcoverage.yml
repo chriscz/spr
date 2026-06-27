@@ -1,0 +1,8 @@
+profile: coverage.txt
+threshold:
+  total: 50     # just under today's 52% — green now, ratcheted up in Phase 2
+  file: 0       # per-file ratchet wired in; non-blocking floor for now
+exclude:
+  paths:
+    - github/githubclient/gen/genclient
+    - github/githubclient/fezzik_types

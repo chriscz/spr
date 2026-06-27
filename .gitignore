@@ -1,3 +1,5 @@
 dist/
 result
 .DS_Store
+coverage.txt
+coverage.out
