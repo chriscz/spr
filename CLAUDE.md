@@ -23,6 +23,30 @@ CI runs `go build -v ./...`, `go test -race -coverprofile=... ./...`, and `gorel
 
 `nix develop` drops you into a shell with the full toolchain (`go`, `goreleaser`, `git`) pinned by `flake.nix`. The same flake is also the Nix distribution target — `packages.spr` is what `nix profile install github:ejoffe/spr` / `nix run` build, so the flake is load-bearing for releases, not just local dev.
 
+## Verification
+
+Local guardrails (Phase 1 harness). One-time setup:
+
+```shell
+mise install          # provision pinned tools (go, golangci-lint, lefthook, go-test-coverage)
+# ensure mise is active on PATH: `eval "$(mise activate bash)"` in ~/.bashrc,
+# and `$HOME/.local/share/mise/shims` on PATH via ~/.profile (for GUI/IDE git)
+make hooks            # install lefthook git hooks
+```
+
+Everyday:
+
+```shell
+make check            # lint + tests + coverage gate — mirrors CI
+```
+
+Hooks: `pre-commit` runs `golangci-lint` + `go build` (fast); `pre-push` runs `go test -race`.
+
+**Coverage ratchet:** the gate is `.testcoverage.yml` (`total`/`file` thresholds), set just
+under current coverage so it is green today. As coverage rises (Phase 2), bump `total` (and
+eventually `file`) toward the new floor — the numbers only ever go up. CI enforces the same
+gate via `go-test-coverage`.
+
 ## Architecture
 
 Flow: `cmd/spr/main.go` (CLI wiring with `urfave/cli`) → `spr.stackediff` (orchestration in `spr/spr.go`) → two injected interfaces it drives:
