@@ -19,6 +19,10 @@ go generate ./...               # regenerate the fezzik GraphQL client (see belo
 
 CI runs `go build -v ./...`, `go test -race -coverprofile=... ./...`, and `goreleaser check`.
 
+## Dev environment
+
+`nix develop` drops you into a shell with the full toolchain (`go`, `goreleaser`, `git`) pinned by `flake.nix`. The same flake is also the Nix distribution target — `packages.spr` is what `nix profile install github:ejoffe/spr` / `nix run` build, so the flake is load-bearing for releases, not just local dev.
+
 ## Architecture
 
 Flow: `cmd/spr/main.go` (CLI wiring with `urfave/cli`) → `spr.stackediff` (orchestration in `spr/spr.go`) → two injected interfaces it drives:
