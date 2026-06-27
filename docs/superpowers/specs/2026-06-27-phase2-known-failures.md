@@ -32,3 +32,6 @@ row here.
 | DG-P03-1 | `github/template/template_custom` | `Body` `log.Fatal` branches (template.go:42–43, 46–47) | `log.Fatal` → `os.Exit(1)`; cannot assert exit | Inject logger / return errors; or subprocess |
 | DG-P03-2 | `github/template/template_custom` | `EditWithEditor` `editor==""`→`"vi"` (template.go:99–101) | Unsetting EDITOR would spawn real `vi` on a TTY | Inject default-editor resolver |
 | DG-P03-3 | `github/template/template_custom` | `EditWithEditor` os I/O error branches (template.go:105–106, 111–113, 128–130) | `os.CreateTemp`/`WriteString`/`ReadFile` errors not injectable in-process | Inject a filesystem abstraction |
+| DG-P04-1 | `github/template/template_why_what` | `Body` template-parse-error branch (template.go) | `whyWhatTemplate` is a `const` that always parses | Inject template / make parse failable |
+| DG-P04-2 | `github/template/template_why_what` | `Body` template-execute-error branch (template.go) | Plain string-field struct never fails `Execute` | Inject template / failable executor |
+| DG-P04-3 | `github/template/template_why_what` | `splitByEmptyLines` fallback `len(sections)==0 && TrimSpace(text)!=""` | **Dead code** — conditions are mutually exclusive (verified) | none — recommend removing the dead branch |
