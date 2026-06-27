@@ -1,6 +1,7 @@
 profile: coverage.txt
 threshold:
-  total: 50     # just under today's 52% — green now, ratcheted up in Phase 2
+  total: 68     # Phase 2: ratcheted as packages land. Held below the eventual
+                # floor so the cmd/spr denominator expansion can't break the gate.
   file: 0       # per-file ratchet wired in; non-blocking floor for now
 exclude:
   paths:
