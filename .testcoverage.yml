@@ -1,6 +1,6 @@
 profile: coverage.txt
 threshold:
-  total: 77     # Phase 2: ratcheted as packages land. Held below the eventual
+  total: 80     # Phase 2: ratcheted as packages land. Held below the eventual
                 # floor so the cmd/spr denominator expansion can't break the gate.
   file: 0       # per-file ratchet wired in; non-blocking floor for now
 exclude:

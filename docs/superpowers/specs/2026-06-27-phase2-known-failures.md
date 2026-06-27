@@ -35,3 +35,6 @@ row here.
 | DG-P04-1 | `github/template/template_why_what` | `Body` template-parse-error branch (template.go) | `whyWhatTemplate` is a `const` that always parses | Inject template / make parse failable |
 | DG-P04-2 | `github/template/template_why_what` | `Body` template-execute-error branch (template.go) | Plain string-field struct never fails `Execute` | Inject template / failable executor |
 | DG-P04-3 | `github/template/template_why_what` | `splitByEmptyLines` fallback `len(sections)==0 && TrimSpace(text)!=""` | **Dead code** — conditions are mutually exclusive (verified) | none — recommend removing the dead branch |
+| DG-P09-1 | `spr` | `check` os.Exit(1) branch (spr.go:738, SPR_DEBUG!=1) | `os.Exit` cannot be asserted in-process | Extract exit into injectable fn; or subprocess |
+| DG-P09-2 | `spr` | `RunMergeCheck` signal goroutine (spr.go:594–600) | Needs an OS interrupt delivered mid-run | Inject signal channel / abstract the runner |
+| DG-P09-3 | `spr` | `RunMergeCheck` `cmd.Start` error branch (spr.go:591–592) | `exec.Command` start rarely fails; not injectable | Inject a command factory |
