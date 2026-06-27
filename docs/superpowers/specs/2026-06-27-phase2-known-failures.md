@@ -38,3 +38,7 @@ row here.
 | DG-P09-1 | `spr` | `check` os.Exit(1) branch (spr.go:738, SPR_DEBUG!=1) | `os.Exit` cannot be asserted in-process | Extract exit into injectable fn; or subprocess |
 | DG-P09-2 | `spr` | `RunMergeCheck` signal goroutine (spr.go:594–600) | Needs an OS interrupt delivered mid-run | Inject signal channel / abstract the runner |
 | DG-P09-3 | `spr` | `RunMergeCheck` `cmd.Start` error branch (spr.go:591–592) | `exec.Command` start rarely fails; not injectable | Inject a command factory |
+| DG-P10-1 | `git/realgit` | `NewGitCmd` rev-parse-fail `os.Exit(-1)` (realcmd.go:24–26) | `os.Exit` not assertable in-process | Inject exit fn; or subprocess |
+| DG-P10-2 | `git/realgit` | `NewGitCmd` PlainOpen-fail `os.Exit(-1)` (realcmd.go:31–33) | `os.Exit` not assertable in-process | Inject exit fn; or subprocess |
+| DG-P10-3 | `git/realgit` | `maybeAdjustPathPerPlatform` `/cygdrive` branch (realcmd.go:44–52) | Needs `cygpath`/Cygwin runner | Cygwin CI runner; or inject path translator |
+| DG-P10-4 | `git/realgit` | `DeleteRemoteBranch` `remote.Push` error branch (realcmd.go:149–151) | go-git push succeeds against a local bare remote; failure not injectable | Inject push / a failing remote server |
