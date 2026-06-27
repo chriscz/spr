@@ -1,8 +1,14 @@
 profile: coverage.txt
 threshold:
-  total: 80     # Phase 2: ratcheted as packages land. Held below the eventual
-                # floor so the cmd/spr denominator expansion can't break the gate.
-  file: 0       # per-file ratchet wired in; non-blocking floor for now
+  total: 90     # Phase 2 final floor (measured 90.3% over tested packages).
+  file: 70      # real per-file anti-rot floor (every covered file is >=75% now,
+                # except the override below). Numbers only go up from here.
+# Per-file overrides for files whose remainder is a recorded deferred gap
+# (see docs/superpowers/specs/2026-06-27-phase2-known-failures.md). Not an
+# exclusion — the file is still measured, just held to its honest current floor.
+override:
+  - threshold: 45   # star.go: MaybeStar's os.Stdin prompt paths (DG-P01-4) are
+    path: github/githubclient/star\.go$
 exclude:
   paths:
     - github/githubclient/gen/genclient

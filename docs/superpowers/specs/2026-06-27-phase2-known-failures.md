@@ -11,6 +11,26 @@ row here.
 |----|---------|------------------|-----------------|------------------|-----------------|
 | _(none yet)_ | | | | | |
 
+## Fully-deferred packages (no `_test.go` added — would only drag the gate)
+
+These two `package main` binaries are dominated by network + `os.Exit` +
+urfave-cli wiring that cannot run in-process. The only in-process-reachable code
+is trivial (see below). Adding a test file would pull the whole package's large
+uncovered statement count into the coverage **denominator** and drop the honest
+total by ~8–11 points to exercise a one-liner — exactly the trade the spec's
+"Coverage mechanics" section warns against. So they were left **absent from the
+coverage profile** (not added to `exclude.paths`) and are itemized here.
+
+| ID | Package | Reachable-but-uncovered in-process | Why the rest is unreachable | Recommendation for the human |
+|----|---------|-----------------------------------|-----------------------------|------------------------------|
+| DG-CMDSPR-1 | `cmd/spr` (~200 stmts) | `truncate` (pure); `handleEditSequence` early-return guard; `init` | `main` calls `realgit.NewGitCmd` then `githubclient.NewGitHubClient` (network; `os.Exit(3)` w/o token) before the urfave-cli `app` is even built; `handleEditSequence`'s rewrite path ends in `os.Exit(0/1)`; the whole `cli.App{}` definition (lines 102–365) only executes after the network client is constructed | Add a GitHub-client seam (construct `app` independent of the client), OR exclude this thin CLI-wiring `main` from the gate. Subprocess/`-cover` GOCOVERDIR e2e could capture `--help`/`version`/`_edit-sequence` if desired. |
+| DG-CMDAMEND-1 | `cmd/amend` (~40 stmts) | `check`; `init` | `main` does `flags.Parse` (→ `--version` `os.Exit(0)`), then `realgit.NewGitCmd` + `config_parser.ParseConfig` + `githubclient.NewGitHubClient` (network) + `spr.AmendCommit`; no file-rewrite slice exists (that logic lives in `cmd/reword`, which IS at 100%) | Same as cmd/spr — inject the client, or exclude from the gate, or e2e via subprocess. |
+
+> The spec's prose grouped `cmd/amend` with `cmd/reword` as "helper binaries that
+> rewrite files (COMMIT_EDITMSG, rebase todos)". That description fits **only**
+> `cmd/reword` (now 100%). The actual `cmd/amend/main.go` does no file rewriting —
+> it is a thin network-bound CLI entrypoint, hence deferred.
+
 ## Repo-wide recommendations (test infra, out of Phase 2 scope)
 
 - `git/mockgit/mockgit.go:32` has a stray `fmt.Printf("CMD: git %s\n", args)`
@@ -42,3 +62,5 @@ row here.
 | DG-P10-2 | `git/realgit` | `NewGitCmd` PlainOpen-fail `os.Exit(-1)` (realcmd.go:31–33) | `os.Exit` not assertable in-process | Inject exit fn; or subprocess |
 | DG-P10-3 | `git/realgit` | `maybeAdjustPathPerPlatform` `/cygdrive` branch (realcmd.go:44–52) | Needs `cygpath`/Cygwin runner | Cygwin CI runner; or inject path translator |
 | DG-P10-4 | `git/realgit` | `DeleteRemoteBranch` `remote.Push` error branch (realcmd.go:149–151) | go-git push succeeds against a local bare remote; failure not injectable | Inject push / a failing remote server |
+| DG-P15-1 | `terminal` | `Width()` success return `int(col), nil` (terminal_other.go:18) | `IoctlGetWinsize` only succeeds against a real TTY; `go test` stdin is not a TTY | Allocate a PTY in the test (e.g. creack/pty) |
+| DG-P15-2 | `terminal` | `terminal_windows.go` `Width()` | `//go:build windows` — not compiled on Linux CI | Windows CI runner |
