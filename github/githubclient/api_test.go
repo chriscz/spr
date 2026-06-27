@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/ejoffe/spr/config"
@@ -1456,4 +1458,229 @@ func TestFetchRequiredChecksStatus_RequiredCheckFailed(t *testing.T) {
 
 	require.NotNil(t, result)
 	require.Equal(t, github.CheckStatusFail, result[prNumber])
+}
+
+// TestFetchRequiredChecksStatus_StatusContext exercises the StatusContext
+// (legacy commit status) union branch of the response, which drives
+// computeRequiredCheckStatus's StatusContext switch and contextName's
+// StatusContext branch.
+func TestFetchRequiredChecksStatus_StatusContext(t *testing.T) {
+	cfg := testConfig()
+	cfg.Repo.RequiredChecks = []string{"ci/build"}
+
+	prNumber := 500
+	prID := "pr_node_500"
+
+	gqlRespData := map[string]interface{}{
+		fmt.Sprintf("pr_%d", prNumber): map[string]interface{}{
+			"number": prNumber,
+			"commits": map[string]interface{}{
+				"nodes": []interface{}{
+					map[string]interface{}{
+						"commit": map[string]interface{}{
+							"statusCheckRollup": map[string]interface{}{
+								"contexts": map[string]interface{}{
+									"nodes": []interface{}{
+										map[string]interface{}{
+											"__typename": "StatusContext",
+											"context":    "ci/build",
+											"state":      "SUCCESS",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	gqlRespJSON, err := json.Marshal(map[string]interface{}{"data": gqlRespData})
+	require.NoError(t, err)
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(gqlRespJSON)
+	})
+
+	c := &client{
+		config:          cfg,
+		api:             &fakeAPI{},
+		graphqlEndpoint: "http://fake-endpoint/graphql",
+		httpClient:      newInMemoryClient(handler),
+	}
+
+	prs := []*github.PullRequest{{ID: prID, Number: prNumber}}
+	result := c.fetchRequiredChecksStatus(context.Background(), prs)
+
+	require.NotNil(t, result)
+	require.Equal(t, github.CheckStatusPass, result[prNumber])
+}
+
+// ---------------------------------------------------------------------------
+// Token / CLI-config resolution tests
+//
+// readHubCLIConfig, readGhCLIConfig and findToken are unexported, so they are
+// directly callable from this internal (package githubclient) test. They read
+// CLI config files from the user home directory; t.Setenv("HOME", ...) points
+// os.UserHomeDir() at a temp dir so the file paths are fully controlled with no
+// network and no production-code change.
+//
+// NOTE: t.Setenv forbids t.Parallel in these tests (enforced by the runtime).
+// ---------------------------------------------------------------------------
+
+// writeFile writes content to path, creating parent dirs as needed.
+func writeFile(t *testing.T, path, content string) {
+	t.Helper()
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+}
+
+func TestReadHubCLIConfig_Success(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	writeFile(t, filepath.Join(home, ".config", "hub"), `github.com:
+- user: octocat
+  oauth_token: hubtoken123
+  protocol: https
+`)
+
+	cfg, err := readHubCLIConfig()
+	require.NoError(t, err)
+	require.NotNil(t, cfg)
+
+	entries, ok := cfg["github.com"]
+	require.True(t, ok)
+	require.Len(t, entries, 1)
+	require.Equal(t, "octocat", entries[0].User)
+	require.Equal(t, "hubtoken123", entries[0].OauthToken)
+	require.Equal(t, "https", entries[0].Protocol)
+}
+
+func TestReadHubCLIConfig_MissingFile(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	// No ~/.config/hub written.
+	cfg, err := readHubCLIConfig()
+	require.Error(t, err)
+	require.Nil(t, cfg)
+	require.Contains(t, err.Error(), "failed to open hub config file")
+}
+
+func TestReadGhCLIConfig_Success(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	writeFile(t, filepath.Join(home, ".config", "gh", "hosts.yml"), `github.com:
+  user: octocat
+  oauth_token: ghtoken456
+  git_protocol: https
+`)
+
+	cfg, err := readGhCLIConfig()
+	require.NoError(t, err)
+	require.NotNil(t, cfg)
+
+	entry, ok := (*cfg)["github.com"]
+	require.True(t, ok)
+	require.Equal(t, "octocat", entry.User)
+	require.Equal(t, "ghtoken456", entry.OauthToken)
+	require.Equal(t, "https", entry.GitProtocol)
+}
+
+func TestReadGhCLIConfig_MissingFile(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	cfg, err := readGhCLIConfig()
+	require.Error(t, err)
+	require.Nil(t, cfg)
+	require.Contains(t, err.Error(), "failed to open gh cli config file")
+}
+
+func TestFindToken_EnvVarFastPath(t *testing.T) {
+	// Point HOME at an empty dir so config-file fallbacks would yield "".
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("GITHUB_TOKEN", "env-token-xyz")
+
+	require.Equal(t, "env-token-xyz", findToken("github.com"))
+}
+
+func TestFindToken_GhConfigMatch(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("GITHUB_TOKEN", "")
+
+	writeFile(t, filepath.Join(home, ".config", "gh", "hosts.yml"), `github.com:
+  user: octocat
+  oauth_token: gh-oauth-token
+  git_protocol: https
+`)
+
+	// When the host matches, findToken calls keyring.Get. In an environment
+	// without a secrets backend keyring.Get errors and findToken falls back to
+	// the config's oauth_token (client.go:99). The keyring-success branch
+	// (client.go:101) requires a real keyring and is a recorded deferred gap.
+	require.Equal(t, "gh-oauth-token", findToken("github.com"))
+}
+
+func TestFindToken_HubConfigFallback(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("GITHUB_TOKEN", "")
+
+	// No gh hosts.yml (so gh path fails), but a hub config exists.
+	writeFile(t, filepath.Join(home, ".config", "hub"), `github.com:
+- user: octocat
+  oauth_token: hub-oauth-token
+  protocol: https
+`)
+
+	require.Equal(t, "hub-oauth-token", findToken("github.com"))
+}
+
+func TestFindToken_HubConfigMultipleEntries(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("GITHUB_TOKEN", "")
+
+	// Two entries triggers the "multiple tokens" warn branch; first is used.
+	writeFile(t, filepath.Join(home, ".config", "hub"), `github.com:
+- user: first
+  oauth_token: first-token
+  protocol: https
+- user: second
+  oauth_token: second-token
+  protocol: https
+`)
+
+	require.Equal(t, "first-token", findToken("github.com"))
+}
+
+func TestFindToken_NoTokenAnywhere(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("GITHUB_TOKEN", "")
+
+	// No gh config and no hub config: both reads fail, findToken returns "".
+	require.Equal(t, "", findToken("github.com"))
+}
+
+func TestFindToken_HubConfigNoMatchingHost(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("GITHUB_TOKEN", "")
+
+	// hub config present but keyed under a different host: the "github.com"
+	// lookup misses and findToken returns "".
+	writeFile(t, filepath.Join(home, ".config", "hub"), `git.example.com:
+- user: octocat
+  oauth_token: other-token
+  protocol: https
+`)
+
+	require.Equal(t, "", findToken("github.com"))
 }
