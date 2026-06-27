@@ -29,3 +29,6 @@ row here.
 | DG-P01-4 | `github/githubclient` | `MaybeStar` stdin-prompt paths (star.go:28–59) | Reads `os.Stdin`; interactive prompts not injectable | Inject `io.Reader` for stdin |
 | DG-P02-1 | `config/config_parser` | `ParseConfig` `os.Exit(2/3/4)` branches (config_parser.go:25–37) | Missing host/owner/name calls `os.Exit`; cannot assert without subprocess | Extract exit into injectable fn, or `exec.Command` subprocess |
 | DG-P02-2 | `config/config_parser` | `check()` error path (remote_source.go:64) | `os.UserHomeDir()` never errors in a normal test env | Inject home-dir lookup |
+| DG-P03-1 | `github/template/template_custom` | `Body` `log.Fatal` branches (template.go:42–43, 46–47) | `log.Fatal` → `os.Exit(1)`; cannot assert exit | Inject logger / return errors; or subprocess |
+| DG-P03-2 | `github/template/template_custom` | `EditWithEditor` `editor==""`→`"vi"` (template.go:99–101) | Unsetting EDITOR would spawn real `vi` on a TTY | Inject default-editor resolver |
+| DG-P03-3 | `github/template/template_custom` | `EditWithEditor` os I/O error branches (template.go:105–106, 111–113, 128–130) | `os.CreateTemp`/`WriteString`/`ReadFile` errors not injectable in-process | Inject a filesystem abstraction |
