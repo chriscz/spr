@@ -10,9 +10,16 @@ import (
 
 	"github.com/ejoffe/spr/config"
 	gogit "github.com/go-git/go-git/v5"
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// Silence realgit's production zerolog debug logging (one line per git command)
+// so test output stays pristine. Test-only; changes no production behavior.
+func init() {
+	zerolog.SetGlobalLevel(zerolog.Disabled)
+}
 
 // initTempRepo creates a temporary git repository suitable for testing.
 // It initialises the repo, sets minimal user config, writes a file, stages
