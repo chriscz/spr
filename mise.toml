@@ -1,0 +1,9 @@
+[tools]
+# Go pinned to CI's line (.github/workflows/ci.yml uses go-version: 1.21)
+go = "1.21.13"
+# goreleaser pinned below 2.16.0, which turned the .goreleaser.yml `brews`
+# deprecation into a hard `check` error.
+goreleaser = "2.15.4"
+lefthook = "1.13.6"
+golangci-lint = "1.64.8"
+"go:github.com/vladopajic/go-test-coverage/v2" = "2.18.8"
