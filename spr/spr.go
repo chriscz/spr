@@ -484,7 +484,7 @@ func (sd *stackediff) MergePullRequests(ctx context.Context, count *uint) {
 	check(err)
 	sd.github.MergePullRequest(ctx, prToMerge, mergeMethod)
 	if sd.config.User.DeleteMergedBranches {
-		sd.gitcmd.DeleteRemoteBranch(ctx, prToMerge.FromBranch)
+		_ = sd.gitcmd.DeleteRemoteBranch(ctx, prToMerge.FromBranch)
 	}
 
 	// Close all the pull requests in the stack below the merged pr
@@ -497,7 +497,7 @@ func (sd *stackediff) MergePullRequests(ctx context.Context, count *uint) {
 		sd.github.CommentPullRequest(ctx, pr, comment)
 		sd.github.ClosePullRequest(ctx, pr)
 		if sd.config.User.DeleteMergedBranches {
-			sd.gitcmd.DeleteRemoteBranch(ctx, pr.FromBranch)
+			_ = sd.gitcmd.DeleteRemoteBranch(ctx, pr.FromBranch)
 		}
 	}
 	sd.profiletimer.Step("MergePullRequests::close prs")

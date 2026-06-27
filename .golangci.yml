@@ -1,0 +1,17 @@
+run:
+  timeout: 5m
+
+linters:
+  disable-all: true
+  enable:
+    - govet
+    - errcheck
+    - staticcheck
+    - ineffassign
+    - unused
+    - gofmt
+
+issues:
+  exclude-dirs:
+    - github/githubclient/gen/genclient
+    - github/githubclient/fezzik_types

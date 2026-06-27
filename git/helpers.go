@@ -60,7 +60,7 @@ func GetLocalCommitStack(cfg *config.Config, gitcmd GitInterface) []Commit {
 		check(err)
 		rebaseCommand := fmt.Sprintf("rebase %s/%s -i --autosquash --autostash",
 			cfg.Repo.GitHubRemote, cfg.Repo.GitHubBranch)
-		gitcmd.GitWithEditor(rebaseCommand, nil, rewordPath)
+		check(gitcmd.GitWithEditor(rebaseCommand, nil, rewordPath))
 
 		gitcmd.MustGit(logCommand, &commitLog)
 		commits, valid = parseLocalCommitStack(commitLog)

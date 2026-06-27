@@ -184,13 +184,13 @@ VERSION: fork of {{.Version}}
 				Name:    "status",
 				Aliases: []string{"s", "st"},
 				Usage:   "Show status of open pull requests",
-			Action: func(c *cli.Context) error {
-				if c.IsSet("text") {
-					stackedpr.TextEnabled = true
-				}
-				stackedpr.StatusPullRequests(ctx)
-				return nil
-			},
+				Action: func(c *cli.Context) error {
+					if c.IsSet("text") {
+						stackedpr.TextEnabled = true
+					}
+					stackedpr.StatusPullRequests(ctx)
+					return nil
+				},
 				Flags: []cli.Flag{
 					detailFlag,
 					textFlag,
@@ -208,22 +208,22 @@ VERSION: fork of {{.Version}}
 				Name:    "update",
 				Aliases: []string{"u", "up"},
 				Usage:   "Update and create pull requests for updated commits in the stack",
-			Before: func(c *cli.Context) error {
-				// only override whatever was set in yaml if flag is explicitly present
-				if c.IsSet("no-rebase") {
-					cfg.User.NoRebase = c.Bool("no-rebase")
-				}
-				if c.IsSet("fetch") && c.IsSet("no-fetch") {
-					return fmt.Errorf("cannot use both --fetch and --no-fetch")
-				}
-				if c.IsSet("fetch") {
-					cfg.User.NoFetch = !c.Bool("fetch")
-				}
-				if c.IsSet("no-fetch") {
-					cfg.User.NoFetch = c.Bool("no-fetch")
-				}
-				return nil
-			},
+				Before: func(c *cli.Context) error {
+					// only override whatever was set in yaml if flag is explicitly present
+					if c.IsSet("no-rebase") {
+						cfg.User.NoRebase = c.Bool("no-rebase")
+					}
+					if c.IsSet("fetch") && c.IsSet("no-fetch") {
+						return fmt.Errorf("cannot use both --fetch and --no-fetch")
+					}
+					if c.IsSet("fetch") {
+						cfg.User.NoFetch = !c.Bool("fetch")
+					}
+					if c.IsSet("no-fetch") {
+						cfg.User.NoFetch = c.Bool("no-fetch")
+					}
+					return nil
+				},
 				Action: func(c *cli.Context) error {
 					if c.IsSet("count") {
 						count := c.Uint("count")
@@ -245,26 +245,26 @@ VERSION: fork of {{.Version}}
 						Aliases: []string{"c"},
 						Usage:   "Update a specified number of pull requests from the bottom of the stack",
 					},
-				&cli.BoolFlag{
-					Name:    "no-rebase",
-					Aliases: []string{"nr"},
-					Usage:   "Disable rebasing",
-					// this env var is needed as previous versions used the env var itself to pass intent to logic
-					// layer ops so it is likely relied on as a feature by users at this point
-					EnvVars: []string{"SPR_NOREBASE"},
-				},
-			&cli.BoolFlag{
-				Name:    "fetch",
-				Aliases: []string{"f"},
-				Usage:   "Enable fetch (overrides noFetch config)",
-				EnvVars: []string{"SPR_FETCH"},
-			},
-			&cli.BoolFlag{
-				Name:    "no-fetch",
-				Aliases: []string{"nf"},
-				Usage:   "Disable fetch",
-				EnvVars: []string{"SPR_NOFETCH"},
-			},
+					&cli.BoolFlag{
+						Name:    "no-rebase",
+						Aliases: []string{"nr"},
+						Usage:   "Disable rebasing",
+						// this env var is needed as previous versions used the env var itself to pass intent to logic
+						// layer ops so it is likely relied on as a feature by users at this point
+						EnvVars: []string{"SPR_NOREBASE"},
+					},
+					&cli.BoolFlag{
+						Name:    "fetch",
+						Aliases: []string{"f"},
+						Usage:   "Enable fetch (overrides noFetch config)",
+						EnvVars: []string{"SPR_FETCH"},
+					},
+					&cli.BoolFlag{
+						Name:    "no-fetch",
+						Aliases: []string{"nf"},
+						Usage:   "Disable fetch",
+						EnvVars: []string{"SPR_NOFETCH"},
+					},
 				},
 			},
 			{
@@ -288,64 +288,64 @@ VERSION: fork of {{.Version}}
 					},
 				},
 			},
-		{
-			Name:    "amend",
-			Aliases: []string{"a"},
-			Usage:   "Amend a commit in the stack",
-			Flags: []cli.Flag{
-				&cli.BoolFlag{
-					Name:    "update",
-					Aliases: []string{"u"},
-					Usage:   "Run spr update after amend",
+			{
+				Name:    "amend",
+				Aliases: []string{"a"},
+				Usage:   "Amend a commit in the stack",
+				Flags: []cli.Flag{
+					&cli.BoolFlag{
+						Name:    "update",
+						Aliases: []string{"u"},
+						Usage:   "Run spr update after amend",
+					},
+				},
+				Action: func(c *cli.Context) error {
+					stackedpr.AmendCommit(ctx)
+					if c.Bool("update") {
+						stackedpr.UpdatePullRequests(ctx, nil, nil)
+					}
+					return nil
 				},
 			},
-			Action: func(c *cli.Context) error {
-				stackedpr.AmendCommit(ctx)
-				if c.Bool("update") {
-					stackedpr.UpdatePullRequests(ctx, nil, nil)
-				}
-				return nil
-			},
-		},
-		{
-			Name:    "edit",
-			Aliases: []string{"e"},
-			Usage:   "Edit a commit in the stack",
-			Flags: []cli.Flag{
-				&cli.BoolFlag{
-					Name:    "done",
-					Aliases: []string{"d"},
-					Usage:   "Finish editing and restore the stack",
+			{
+				Name:    "edit",
+				Aliases: []string{"e"},
+				Usage:   "Edit a commit in the stack",
+				Flags: []cli.Flag{
+					&cli.BoolFlag{
+						Name:    "done",
+						Aliases: []string{"d"},
+						Usage:   "Finish editing and restore the stack",
+					},
+					&cli.BoolFlag{
+						Name:    "update",
+						Aliases: []string{"u"},
+						Usage:   "Run spr update after finishing edit (use with --done)",
+					},
+					&cli.BoolFlag{
+						Name:  "abort",
+						Usage: "Abort the current edit session",
+					},
 				},
-				&cli.BoolFlag{
-					Name:    "update",
-					Aliases: []string{"u"},
-					Usage:   "Run spr update after finishing edit (use with --done)",
+				Action: func(c *cli.Context) error {
+					if c.Bool("abort") {
+						stackedpr.EditCommitAbort(ctx)
+					} else if c.Bool("done") {
+						stackedpr.EditCommitDone(ctx, c.Bool("update"))
+					} else {
+						stackedpr.EditCommit(ctx)
+					}
+					return nil
 				},
-				&cli.BoolFlag{
-					Name:  "abort",
-					Usage: "Abort the current edit session",
+			},
+			{
+				Name:  "check",
+				Usage: "Run pre merge checks (configured by MergeCheck in repository config)",
+				Action: func(c *cli.Context) error {
+					stackedpr.RunMergeCheck(ctx)
+					return nil
 				},
 			},
-			Action: func(c *cli.Context) error {
-				if c.Bool("abort") {
-					stackedpr.EditCommitAbort(ctx)
-				} else if c.Bool("done") {
-					stackedpr.EditCommitDone(ctx, c.Bool("update"))
-				} else {
-					stackedpr.EditCommit(ctx)
-				}
-				return nil
-			},
-		},
-		{
-			Name:  "check",
-			Usage: "Run pre merge checks (configured by MergeCheck in repository config)",
-			Action: func(c *cli.Context) error {
-				stackedpr.RunMergeCheck(ctx)
-				return nil
-			},
-		},
 			{
 				Name:  "version",
 				Usage: "Show version info",
@@ -362,5 +362,5 @@ VERSION: fork of {{.Version}}
 		},
 	}
 
-	app.Run(os.Args)
+	_ = app.Run(os.Args)
 }

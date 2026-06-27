@@ -19,10 +19,10 @@ type PullRequest struct {
 	Title      string
 	Body       string
 
-	MergeStatus    PullRequestMergeStatus
-	Merged         bool
-	Commits        []git.Commit
-	InQueue        bool
+	MergeStatus     PullRequestMergeStatus
+	Merged          bool
+	Commits         []git.Commit
+	InQueue         bool
 	LocalCommitHash string
 }
 
@@ -93,12 +93,6 @@ func (pr *PullRequest) Ready(config *config.Config) bool {
 }
 
 const (
-	// Terminal escape codes for colors
-	colorReset = "\033[0m"
-	colorRed   = "\033[31m"
-	colorGreen = "\033[32m"
-	colorBlue  = "\033[34m"
-
 	// ascii status bits
 	asciiCheckmark = "v"
 	asciiCrossmark = "x"
