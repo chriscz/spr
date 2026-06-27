@@ -20,6 +20,26 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// silenceStdout redirects os.Stdout to /dev/null for the duration of a test.
+// Some production paths (RunMergeCheck, the remote-pr-branch warning in
+// fetchAndGetGitHubInfo, ProfilingSummary) print to the real stdout via
+// fmt.Println/Printf rather than the sd.output buffer; this keeps test output
+// pristine. Use as: defer silenceStdout(t)()
+//
+// Note: this only suppresses real-stdout writes. Assertions on sd.output (a
+// bytes.Buffer) are unaffected.
+func silenceStdout(t *testing.T) func() {
+	t.Helper()
+	old := os.Stdout
+	devnull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
+	require.NoError(t, err)
+	os.Stdout = devnull
+	return func() {
+		os.Stdout = old
+		_ = devnull.Close()
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Local git.GitInterface implementations (package spr, not mockgit).
 // These record git calls and return canned responses, letting tests drive
@@ -344,6 +364,7 @@ func TestSyncStackNonEmpty(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestRunMergeCheckNotConfigured(t *testing.T) {
+	defer silenceStdout(t)()
 	s, _, _, _, _ := makeTestObjects(t, true)
 	ctx := context.Background()
 	s.config.Repo.MergeCheck = ""
@@ -352,6 +373,7 @@ func TestRunMergeCheckNotConfigured(t *testing.T) {
 }
 
 func TestRunMergeCheckNoLocalCommits(t *testing.T) {
+	defer silenceStdout(t)()
 	s, _, _, _, _ := makeTestObjects(t, true)
 	ctx := context.Background()
 
@@ -368,6 +390,7 @@ func TestRunMergeCheckNoLocalCommits(t *testing.T) {
 }
 
 func TestRunMergeCheckPassed(t *testing.T) {
+	defer silenceStdout(t)()
 	s, _, githubmock, _, _ := makeTestObjects(t, true)
 	ctx := context.Background()
 
@@ -395,6 +418,7 @@ func TestRunMergeCheckPassed(t *testing.T) {
 }
 
 func TestRunMergeCheckFailed(t *testing.T) {
+	defer silenceStdout(t)()
 	s, _, githubmock, _, _ := makeTestObjects(t, true)
 	ctx := context.Background()
 
@@ -426,6 +450,7 @@ func TestRunMergeCheckFailed(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestProfilingEnableAndSummary(t *testing.T) {
+	defer silenceStdout(t)()
 	s, _, _, _, _ := makeTestObjects(t, true)
 	s.ProfilingEnable()
 	s.profiletimer.Step("TestStep")
@@ -495,6 +520,7 @@ func TestFetchAndGetGitHubInfoForceFetchTags(t *testing.T) {
 }
 
 func TestFetchAndGetGitHubInfoRemotePRBranch(t *testing.T) {
+	defer silenceStdout(t)()
 	s, _, githubmock, _, _ := makeTestObjects(t, true)
 	ctx := context.Background()
 
@@ -1065,6 +1091,7 @@ func TestUpdatePullRequestsWithCount(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestRunMergeCheckMultiWordCommandPassed(t *testing.T) {
+	defer silenceStdout(t)()
 	s, _, githubmock, _, _ := makeTestObjects(t, true)
 	ctx := context.Background()
 
@@ -1093,6 +1120,7 @@ func TestRunMergeCheckMultiWordCommandPassed(t *testing.T) {
 }
 
 func TestRunMergeCheckMultiWordCommandFailed(t *testing.T) {
+	defer silenceStdout(t)()
 	s, _, githubmock, _, _ := makeTestObjects(t, true)
 	ctx := context.Background()
 
