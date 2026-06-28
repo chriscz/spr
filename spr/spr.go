@@ -92,7 +92,9 @@ func (sd *stackediff) AmendCommit(ctx context.Context) {
 }
 
 func (sd *stackediff) editStatePath() string {
-	return filepath.Join(sd.gitcmd.RootDir(), ".git", "spr_edit_state")
+	// Use the resolved git dir, not RootDir()+"/.git": inside a linked
+	// worktree `.git` is a file, so joining it would yield "not a directory".
+	return filepath.Join(sd.gitcmd.GitDir(), "spr_edit_state")
 }
 
 func (sd *stackediff) isEditing() bool {
@@ -181,9 +183,11 @@ func (sd *stackediff) EditCommitDone(ctx context.Context, update bool) {
 	sd.gitcmd.MustGit("add -u", nil)
 
 	// Check if we're resolving a rebase conflict or at the initial edit stop.
-	// Git creates .git/REBASE_HEAD when a rebase stops due to a conflict,
-	// but NOT when it stops at an 'edit' point.
-	rebaseHeadPath := filepath.Join(sd.gitcmd.RootDir(), ".git", "REBASE_HEAD")
+	// Git creates REBASE_HEAD in the git dir when a rebase stops due to a
+	// conflict, but NOT when it stops at an 'edit' point. Use the resolved
+	// git dir so this works inside a linked worktree too (where `.git` is a
+	// file, not a directory).
+	rebaseHeadPath := filepath.Join(sd.gitcmd.GitDir(), "REBASE_HEAD")
 	_, rebaseHeadErr := os.Stat(rebaseHeadPath)
 	isConflictResolution := rebaseHeadErr == nil
 

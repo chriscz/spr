@@ -22,6 +22,7 @@ func (s *stubGit) Git(args string, output *string) error                        
 func (s *stubGit) MustGit(args string, output *string)                               {}
 func (s *stubGit) GitWithEditor(args string, output *string, editorCmd string) error { return nil }
 func (s *stubGit) RootDir() string                                                   { return s.rootDir }
+func (s *stubGit) GitDir() string                                                    { return s.rootDir + "/.git" }
 func (s *stubGit) DeleteRemoteBranch(ctx context.Context, branch string) error       { return nil }
 
 var _ git.GitInterface = (*stubGit)(nil)

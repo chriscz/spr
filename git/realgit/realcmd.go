@@ -27,6 +27,19 @@ func NewGitCmd(cfg *config.Config) *gitcmd {
 	}
 	rootdir = strings.TrimSpace(maybeAdjustPathPerPlatform(rootdir))
 
+	// Resolve the real git directory. This is NOT always `<rootdir>/.git`:
+	// inside a linked worktree, `.git` at the work-tree root is a file
+	// pointing at `<common>/.git/worktrees/<name>`. `rev-parse
+	// --absolute-git-dir` (git 2.13+) returns the correct absolute path in
+	// both layouts.
+	var gitdir string
+	err = initcmd.Git("rev-parse --absolute-git-dir", &gitdir)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(-1)
+	}
+	gitdir = strings.TrimSpace(maybeAdjustPathPerPlatform(gitdir))
+
 	repo, err := gogit.PlainOpen(rootdir)
 	if err != nil {
 		fmt.Println(err)
@@ -37,6 +50,7 @@ func NewGitCmd(cfg *config.Config) *gitcmd {
 		config:  cfg,
 		repo:    repo,
 		rootdir: rootdir,
+		gitdir:  gitdir,
 	}
 }
 
@@ -58,6 +72,7 @@ type gitcmd struct {
 	config  *config.Config
 	repo    *gogit.Repository
 	rootdir string
+	gitdir  string
 }
 
 // gitNoopEditor is the no-op editor used for non-interactive git operations
@@ -134,6 +149,10 @@ func (c *gitcmd) GitWithEditor(argStr string, output *string, editorCmd string) 
 
 func (c *gitcmd) RootDir() string {
 	return c.rootdir
+}
+
+func (c *gitcmd) GitDir() string {
+	return c.gitdir
 }
 
 func (c *gitcmd) DeleteRemoteBranch(ctx context.Context, branch string) error {

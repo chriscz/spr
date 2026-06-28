@@ -65,6 +65,7 @@ func (r *gitRecorder) GitWithEditor(args string, output *string, editorCmd strin
 	return r.Git(args, output)
 }
 func (r *gitRecorder) RootDir() string { return r.rootdir }
+func (r *gitRecorder) GitDir() string  { return r.rootdir + "/.git" }
 func (r *gitRecorder) DeleteRemoteBranch(_ context.Context, branch string) error {
 	r.calls = append(r.calls, "DeleteRemoteBranch("+branch+")")
 	return nil
@@ -89,6 +90,7 @@ func (r *gitLogResponder) GitWithEditor(args string, output *string, editorCmd s
 	return r.Git(args, output)
 }
 func (r *gitLogResponder) RootDir() string                                           { return "" }
+func (r *gitLogResponder) GitDir() string                                            { return "/.git" }
 func (r *gitLogResponder) DeleteRemoteBranch(_ context.Context, branch string) error { return nil }
 
 // fetchRecorder records calls and optionally returns an error for rebase.
@@ -114,6 +116,7 @@ func (r *fetchRecorder) GitWithEditor(args string, output *string, editorCmd str
 	return r.Git(args, output)
 }
 func (r *fetchRecorder) RootDir() string                                           { return "" }
+func (r *fetchRecorder) GitDir() string                                            { return "/.git" }
 func (r *fetchRecorder) DeleteRemoteBranch(_ context.Context, branch string) error { return nil }
 
 // pushRecorder records MustGit calls (status, push etc.)
@@ -134,6 +137,7 @@ func (r *pushRecorder) GitWithEditor(args string, output *string, editorCmd stri
 	return r.Git(args, output)
 }
 func (r *pushRecorder) RootDir() string                                           { return "" }
+func (r *pushRecorder) GitDir() string                                            { return "/.git" }
 func (r *pushRecorder) DeleteRemoteBranch(_ context.Context, branch string) error { return nil }
 
 // editErrorRecorder: handles log (with canned response), rebase -i errors,
@@ -165,6 +169,7 @@ func (r *editStartErrorRecorder) GitWithEditor(args string, output *string, edit
 	return r.Git(args, output)
 }
 func (r *editStartErrorRecorder) RootDir() string { return r.tmpDir }
+func (r *editStartErrorRecorder) GitDir() string  { return r.tmpDir + "/.git" }
 func (r *editStartErrorRecorder) DeleteRemoteBranch(_ context.Context, branch string) error {
 	return nil
 }
@@ -192,6 +197,7 @@ func (r *amendErrorRecorder) GitWithEditor(args string, output *string, editorCm
 	return r.Git(args, output)
 }
 func (r *amendErrorRecorder) RootDir() string                                           { return r.tmpDir }
+func (r *amendErrorRecorder) GitDir() string                                            { return r.tmpDir + "/.git" }
 func (r *amendErrorRecorder) DeleteRemoteBranch(_ context.Context, branch string) error { return nil }
 
 // abortErrorRecorder: "rebase --abort" returns an error.
@@ -217,6 +223,7 @@ func (r *abortErrorRecorder) GitWithEditor(args string, output *string, editorCm
 	return r.Git(args, output)
 }
 func (r *abortErrorRecorder) RootDir() string                                           { return r.tmpDir }
+func (r *abortErrorRecorder) GitDir() string                                            { return r.tmpDir + "/.git" }
 func (r *abortErrorRecorder) DeleteRemoteBranch(_ context.Context, branch string) error { return nil }
 
 // conflictContinueErrorRecorder: "rebase --continue" returns an error.
@@ -242,6 +249,7 @@ func (r *conflictContinueErrorRecorder) GitWithEditor(args string, output *strin
 	return r.Git(args, output)
 }
 func (r *conflictContinueErrorRecorder) RootDir() string { return r.tmpDir }
+func (r *conflictContinueErrorRecorder) GitDir() string  { return r.tmpDir + "/.git" }
 func (r *conflictContinueErrorRecorder) DeleteRemoteBranch(_ context.Context, branch string) error {
 	return nil
 }
@@ -271,6 +279,7 @@ func (r *stashErrorRecorder) GitWithEditor(args string, output *string, editorCm
 	return r.Git(args, output)
 }
 func (r *stashErrorRecorder) RootDir() string                                           { return "" }
+func (r *stashErrorRecorder) GitDir() string                                            { return "/.git" }
 func (r *stashErrorRecorder) DeleteRemoteBranch(_ context.Context, branch string) error { return nil }
 
 // dirtyTreeRecorder: simulates a dirty tree and records all git calls.
@@ -291,6 +300,7 @@ func (r *dirtyTreeRecorder) GitWithEditor(args string, output *string, editorCmd
 	return r.Git(args, output)
 }
 func (r *dirtyTreeRecorder) RootDir() string                                           { return "" }
+func (r *dirtyTreeRecorder) GitDir() string                                            { return "/.git" }
 func (r *dirtyTreeRecorder) DeleteRemoteBranch(_ context.Context, branch string) error { return nil }
 
 // ---------------------------------------------------------------------------
@@ -1196,6 +1206,7 @@ func (r *updateStashErrorRecorder) GitWithEditor(args string, output *string, ed
 	return r.Git(args, output)
 }
 func (r *updateStashErrorRecorder) RootDir() string { return "" }
+func (r *updateStashErrorRecorder) GitDir() string  { return "/.git" }
 func (r *updateStashErrorRecorder) DeleteRemoteBranch(_ context.Context, branch string) error {
 	return nil
 }
@@ -1244,6 +1255,7 @@ func (r *rebaseErrorRecorder) GitWithEditor(args string, output *string, editorC
 	return r.Git(args, output)
 }
 func (r *rebaseErrorRecorder) RootDir() string { return "" }
+func (r *rebaseErrorRecorder) GitDir() string  { return "/.git" }
 func (r *rebaseErrorRecorder) DeleteRemoteBranch(_ context.Context, branch string) error {
 	return nil
 }

@@ -7,6 +7,11 @@ type GitInterface interface {
 	Git(args string, output *string) error
 	MustGit(args string, output *string)
 	RootDir() string
+	// GitDir returns the absolute path to the repository's git directory.
+	// Unlike RootDir()+"/.git", this is correct inside a linked worktree,
+	// where `.git` at the work-tree root is a file (a gitdir pointer) rather
+	// than a directory.
+	GitDir() string
 	DeleteRemoteBranch(ctx context.Context, branch string) error
 }
 

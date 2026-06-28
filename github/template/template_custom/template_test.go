@@ -35,6 +35,10 @@ func (m *mockGit) RootDir() string {
 	return m.rootDir
 }
 
+func (m *mockGit) GitDir() string {
+	return m.rootDir + "/.git"
+}
+
 func (m *mockGit) DeleteRemoteBranch(ctx context.Context, branch string) error {
 	return nil
 }

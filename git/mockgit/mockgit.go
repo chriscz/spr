@@ -24,6 +24,13 @@ func (m *Mock) SetRootDir(dir string) {
 	m.rootdir = dir
 }
 
+// SetGitDir sets the resolved git directory returned by GitDir(). In a real
+// repo this is `<rootdir>/.git`; in a linked worktree it is a path under the
+// common repo's `.git/worktrees/<name>` directory.
+func (m *Mock) SetGitDir(dir string) {
+	m.gitdir = dir
+}
+
 func (m *Mock) GitWithEditor(args string, output *string, editorCmd string) error {
 	return m.Git(args, output)
 }
@@ -74,12 +81,22 @@ func (m *Mock) RootDir() string {
 	return m.rootdir
 }
 
+// GitDir returns the resolved git directory. If SetGitDir was not called it
+// falls back to `<rootdir>/.git`, matching the non-worktree layout.
+func (m *Mock) GitDir() string {
+	if m.gitdir != "" {
+		return m.gitdir
+	}
+	return m.rootdir + "/.git"
+}
+
 type Mock struct {
 	assert      *require.Assertions
 	expectedCmd []string
 	response    []responder
 	errors      []error
 	rootdir     string
+	gitdir      string
 }
 
 type responder interface {

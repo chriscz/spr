@@ -1025,6 +1025,84 @@ func setupEditTest(t *testing.T) (
 	return
 }
 
+// setupWorktreeEditTest mimics running spr from inside a linked git worktree.
+// In a worktree, `.git` at the work-tree root is a *file* (a "gitdir: ..."
+// pointer), and the real git directory lives under the common repo's
+// `.git/worktrees/<name>`. spr must resolve and use that real git dir for the
+// edit state / REBASE_HEAD probe — not blindly join `<root>/.git`, which here
+// is a file and would yield "not a directory" on write.
+func setupWorktreeEditTest(t *testing.T) (
+	s *stackediff, gitmock *mockgit.Mock,
+	input *bytes.Buffer, output *bytes.Buffer, gitDir string) {
+	t.Helper()
+	s, gitmock, _, input, output = makeTestObjects(t, true)
+
+	worktreeRoot := t.TempDir()
+	// The common repo's real git dir, holding the per-worktree subdir.
+	commonGitDir := t.TempDir()
+	gitDir = filepath.Join(commonGitDir, "worktrees", "wt")
+	require.NoError(t, os.MkdirAll(gitDir, 0755))
+
+	// In a worktree, `.git` is a FILE, not a directory.
+	gitFile := filepath.Join(worktreeRoot, ".git")
+	require.NoError(t, os.WriteFile(gitFile, []byte("gitdir: "+gitDir+"\n"), 0644))
+
+	gitmock.SetRootDir(worktreeRoot)
+	gitmock.SetGitDir(gitDir)
+	return
+}
+
+// TestEditCommitSelectCommitInWorktree is the regression test for issue #519:
+// `git spr edit` failed inside a git worktree because the edit state file was
+// written to `<root>/.git/spr_edit_state`, but `<root>/.git` is a file in a
+// worktree, so the write errored with "not a directory" and the command
+// crashed. The fix resolves the real git dir and writes the state there.
+func TestEditCommitSelectCommitInWorktree(t *testing.T) {
+	s, gitmock, input, output, gitDir := setupWorktreeEditTest(t)
+	ctx := context.Background()
+
+	c1 := git.Commit{
+		CommitID:   "00000001",
+		CommitHash: "c100000000000000000000000000000000000000",
+		Subject:    "test commit 1",
+	}
+
+	gitmock.ExpectLogAndRespond([]*git.Commit{&c1})
+	gitmock.ExpectEditStart()
+
+	input.WriteString("1\n")
+	s.EditCommit(ctx)
+
+	// The state file must land in the resolved (real) git dir, not under the
+	// `.git` pointer file at the worktree root.
+	stateFile := filepath.Join(gitDir, "spr_edit_state")
+	_, err := os.Stat(stateFile)
+	require.NoError(t, err, "state file should exist in the resolved git dir after starting edit")
+
+	require.Contains(t, output.String(), "Editing commit 1")
+	gitmock.ExpectationsMet()
+}
+
+// TestEditCommitDoneInWorktree covers the second hardcoded `.git` site
+// (the REBASE_HEAD probe + edit-state cleanup) under a worktree layout.
+func TestEditCommitDoneInWorktree(t *testing.T) {
+	s, gitmock, _, output, gitDir := setupWorktreeEditTest(t)
+	ctx := context.Background()
+
+	stateFile := filepath.Join(gitDir, "spr_edit_state")
+	require.NoError(t, os.WriteFile(stateFile, []byte("commit_id=00000001\n"), 0644))
+
+	// No REBASE_HEAD in the resolved git dir -> initial edit stop -> amend path.
+	gitmock.ExpectEditDoneAmend()
+
+	s.EditCommitDone(ctx, false)
+
+	require.Contains(t, output.String(), "Stack restored successfully")
+	_, err := os.Stat(stateFile)
+	require.True(t, os.IsNotExist(err), "state file should be removed from the resolved git dir after done")
+	gitmock.ExpectationsMet()
+}
+
 func TestEditCommitNoCommits(t *testing.T) {
 	s, gitmock, _, output, _ := setupEditTest(t)
 	ctx := context.Background()

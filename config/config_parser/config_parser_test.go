@@ -31,6 +31,7 @@ type fakeCmd struct {
 }
 
 func (f *fakeGit) RootDir() string { return f.rootDir }
+func (f *fakeGit) GitDir() string  { return f.rootDir + "/.git" }
 
 func (f *fakeGit) Git(args string, output *string) error {
 	if f.pos >= len(f.commands) {

@@ -59,6 +59,7 @@ func (s *seqGit) GitWithEditor(args string, output *string, _ string) error {
 }
 
 func (s *seqGit) RootDir() string { return "" }
+func (s *seqGit) GitDir() string  { return "/.git" }
 
 func (s *seqGit) DeleteRemoteBranch(_ context.Context, branch string) error {
 	return s.Git(fmt.Sprintf("DeleteRemoteBranch(%s)", branch), nil)
