@@ -56,12 +56,15 @@ var (
 // BuildBinary builds an instrumented (coverage-enabled) binary for the given Go
 // package and returns the absolute path to the built executable. pkg should be a
 // full import path such as "github.com/ejoffe/spr/cmd/spr"; for convenience a
-// relative path like "./cmd/spr" is also accepted and resolved against the repo
-// root.
+// leading-"./" relative path like "./cmd/spr" is also accepted and resolved
+// against the module root.
 //
 // The build runs `go build -cover -covermode=atomic` from the repo root so it is
 // independent of the test's working directory. Results are cached per package for
-// the lifetime of the test binary process.
+// the lifetime of the test binary process: the binary is written into a
+// process-lifetime temp dir (os.MkdirTemp, NOT t.TempDir) so a cached path stays
+// valid for every test in the process, even after the first caller's test ends.
+// The OS reclaims the dir on process exit.
 func BuildBinary(t *testing.T, pkg string) string {
 	t.Helper()
 
@@ -74,9 +77,13 @@ func BuildBinary(t *testing.T, pkg string) string {
 	root := repoRoot(t)
 
 	// Normalise a leading "./" relative package into a full import path so the
-	// build is unaffected by CWD.
+	// build is unaffected by CWD. "../" paths are not supported (no caller needs
+	// them and they cannot be resolved into a module import path here).
 	buildPkg := pkg
-	if strings.HasPrefix(pkg, "./") || strings.HasPrefix(pkg, "../") {
+	if strings.HasPrefix(pkg, "../") {
+		t.Fatalf("e2e: BuildBinary does not support %q; pass a full import path or a leading-\"./\" path", pkg)
+	}
+	if strings.HasPrefix(pkg, "./") {
 		buildPkg = "github.com/ejoffe/spr/" + filepath.ToSlash(filepath.Clean(strings.TrimPrefix(pkg, "./")))
 	}
 
@@ -84,7 +91,14 @@ func BuildBinary(t *testing.T, pkg string) string {
 	if runtime.GOOS == "windows" {
 		name += ".exe"
 	}
-	out := filepath.Join(t.TempDir(), name)
+
+	// Use a process-lifetime dir (not t.TempDir) so cached binaries outlive the
+	// test that first built them.
+	binDir, err := os.MkdirTemp("", "e2e-bin-")
+	if err != nil {
+		t.Fatalf("e2e: creating bin dir: %v", err)
+	}
+	out := filepath.Join(binDir, name)
 
 	cmd := exec.Command("go", "build", "-cover", "-covermode=atomic", "-o", out, buildPkg)
 	cmd.Dir = root
