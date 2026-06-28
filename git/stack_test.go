@@ -299,6 +299,48 @@ func TestParseLocalCommitStack_EmptyLog(t *testing.T) {
 	assert.Empty(t, commits)
 }
 
+// TestParseLocalCommitStack_PreservesBodyIndentation reproduces the reported
+// bug where indented body lines lose their indentation in the resulting PR.
+//
+// `git log --format=medium` prefixes every message line with exactly four
+// spaces. A user who indents a body line by four spaces (e.g. a fenced code
+// block) therefore appears with EIGHT leading spaces in the raw log. The parser
+// must strip only git's four-space prefix and preserve the user's relative
+// indentation. The old code did strings.TrimSpace(line) per line, destroying
+// all leading whitespace.
+func TestParseLocalCommitStack_PreservesBodyIndentation(t *testing.T) {
+	// Faithful to real `git log --format=medium` output: 4-space prefix per
+	// line. The user indented two body lines by an extra 4 spaces (8 total).
+	commitLog := "" +
+		"commit aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n" +
+		"Author: Test Author <test@example.com>\n" +
+		"Date:   Mon Jan 01 00:00:00 2024 -0700\n" +
+		"\n" +
+		"    Subject line\n" +
+		"    \n" +
+		"    Example:\n" +
+		"        indented code line\n" +
+		"        second indented line\n" +
+		"    back to normal\n" +
+		"    \n" +
+		"    commit-id:aaaaaaaa\n" +
+		"\n"
+
+	commits, valid := parseLocalCommitStack(commitLog)
+	require.True(t, valid)
+	require.Len(t, commits, 1)
+	assert.Equal(t, "Subject line", commits[0].Subject)
+
+	// The user's relative indentation (4 spaces) must survive parsing.
+	assert.Contains(t, commits[0].Body, "    indented code line",
+		"4-space user indentation must be preserved (only git's prefix stripped)")
+	assert.Contains(t, commits[0].Body, "    second indented line")
+	// Non-indented lines must NOT gain spurious leading whitespace.
+	assert.Contains(t, commits[0].Body, "\nback to normal")
+	assert.True(t, strings.HasPrefix(commits[0].Body, "Example:"),
+		"body should start at the first non-blank content line, no leading blank/space")
+}
+
 func TestParseLocalCommitStack_BodyLineAtSubjectPlusOne(t *testing.T) {
 	// Craft a commit log where a body line appears at exactly subjectIndex+1
 	// (i.e., no blank line separator between subject and first body line).

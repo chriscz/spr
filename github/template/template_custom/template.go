@@ -135,7 +135,10 @@ func EditWithEditor(initialContent string) (string, error) {
 
 func (t *CustomTemplatizer) formatBody(commit git.Commit, stack []*github.PullRequest) string {
 	if len(stack) <= 1 {
-		return strings.TrimSpace(commit.Body)
+		// Pass the body through verbatim; trimming here would asymmetrically
+		// strip leading/trailing whitespace the user placed in the body
+		// (the multi-PR path below does not trim).
+		return commit.Body
 	}
 
 	if commit.Body == "" {

@@ -179,12 +179,39 @@ func TestFormatBody(t *testing.T) {
 				assert.Contains(t, result, wantStr, "Expected output to contain: %s", wantStr)
 			}
 
-			// For single commit or empty stack, body should be trimmed
+			// For single commit or empty stack, body should be passed through
+			// verbatim (no leading/trailing whitespace stripping).
 			if len(tt.stack) <= 1 {
-				assert.Equal(t, strings.TrimSpace(tt.commit.Body), result)
+				assert.Equal(t, tt.commit.Body, result)
 			}
 		})
 	}
+}
+
+// TestFormatBodyPreservesSinglePRWhitespace reproduces the reported bug where
+// the single-PR / empty-stack render path strips leading & trailing whitespace
+// from the commit body via strings.TrimSpace. The multi-PR path (formatBody
+// with len(stack) > 1) preserves it, so the single-PR path is asymmetric and
+// drops whitespace the user intentionally placed in the body.
+func TestFormatBodyPreservesSinglePRWhitespace(t *testing.T) {
+	repoConfig := &config.RepoConfig{ShowPrTitlesInStack: false}
+	gitcmd := &mockGit{rootDir: "/tmp"}
+	templatizer := NewCustomTemplatizer(repoConfig, gitcmd)
+
+	// Body with an indented first line and a trailing blank line — the kind of
+	// whitespace TrimSpace would destroy.
+	body := "    indented first line\nmiddle line\n\n"
+	commit := git.Commit{Subject: "Test commit", Body: body}
+
+	// single commit in stack -> hits the len(stack) <= 1 branch
+	stack := []*github.PullRequest{
+		{Number: 1, Commit: git.Commit{CommitID: "commit1"}},
+	}
+
+	result := templatizer.formatBody(commit, stack)
+
+	assert.Equal(t, body, result,
+		"single-PR path must not strip leading/trailing whitespace from the body")
 }
 
 func TestFormatBodyWithPRTitles(t *testing.T) {

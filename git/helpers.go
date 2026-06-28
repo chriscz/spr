@@ -77,6 +77,24 @@ func GetLocalCommitStack(cfg *config.Config, gitcmd GitInterface) []Commit {
 	return commits
 }
 
+// stripLogIndent removes the fixed indent that `git log --format=medium` adds
+// to every commit-message line (four spaces; some configs/pretty formats use a
+// single tab). Only that prefix is removed so the user's own relative
+// indentation in the body (e.g. fenced code blocks) is preserved. Trailing
+// whitespace is dropped since git does not add it meaningfully and it would
+// only create noise.
+func stripLogIndent(line string) string {
+	if strings.HasPrefix(line, "\t") {
+		line = line[1:]
+	} else {
+		// git medium-format indents with exactly four spaces; remove up to four.
+		for i := 0; i < 4 && strings.HasPrefix(line, " "); i++ {
+			line = line[1:]
+		}
+	}
+	return strings.TrimRight(line, " \t\r")
+}
+
 func parseLocalCommitStack(commitLog string) ([]Commit, bool) {
 	var commits []Commit
 
@@ -146,9 +164,9 @@ func parseLocalCommitStack(commitLog string) ([]Commit, bool) {
 			if index == subjectIndex {
 				scannedCommit.Subject = strings.TrimSpace(line)
 			} else if index == (subjectIndex+1) && line != "\n" {
-				scannedCommit.Body += strings.TrimSpace(line) + "\n"
+				scannedCommit.Body += stripLogIndent(line) + "\n"
 			} else if index > (subjectIndex + 1) {
-				scannedCommit.Body += strings.TrimSpace(line) + "\n"
+				scannedCommit.Body += stripLogIndent(line) + "\n"
 			}
 		}
 
