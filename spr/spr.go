@@ -23,6 +23,10 @@ import (
 	"github.com/ejoffe/spr/github"
 )
 
+// StackedPR is the exported name for the stackediff command orchestrator so
+// callers (e.g. cmd/spr) can reference the type returned by NewStackedPR.
+type StackedPR = stackediff
+
 // NewStackedPR constructs and returns a new stackediff instance.
 func NewStackedPR(config *config.Config, github github.GitHubInterface, gitcmd git.GitInterface) *stackediff {
 	return &stackediff{

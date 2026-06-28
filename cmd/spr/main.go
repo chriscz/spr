@@ -72,6 +72,58 @@ func handleEditSequence() {
 	os.Exit(0)
 }
 
+// versionString returns the human-readable version line, built from the
+// build-time package vars. It is needed both for the early short-circuit below
+// and for the cli.App's Version field.
+func versionString() string {
+	return fmt.Sprintf("%s : %s : %s\n", version, date, truncate(commit, 8))
+}
+
+// handleEarlyExit handles the informational commands `--version`/`-v`/`version`
+// and `--help`/`-h`/`help` (including `<subcommand> --help`) BEFORE any
+// git/config/GitHub initialization. These commands must work regardless of
+// whether we are inside a git repo, whether a `.spr.yml` exists, or whether a
+// GitHub token is configured. Initializing git and config first (as the rest of
+// main does) caused them to fail outside a repo (exit 255) or without
+// config/token (exit 2/3). Like handleEditSequence, this inspects os.Args
+// directly and exits before any init runs.
+//
+// If any arg is a help flag/command, the real argv is replayed through a
+// dependency-free cli.App so subcommand help (e.g. `update --help`) routes to
+// the right command; no command Action ever runs on the help path. A top-level
+// version request prints the version directly.
+func handleEarlyExit() {
+	args := os.Args[1:]
+
+	// Help: --help/-h anywhere, or the bare `help` command. Delegate the actual
+	// argv so `<subcommand> --help` renders that subcommand's help.
+	for _, arg := range args {
+		if arg == "--help" || arg == "-h" || arg == "help" {
+			app := newApp(nil, nil, nil)
+			_ = app.Run(os.Args)
+			os.Exit(0)
+		}
+	}
+
+	// Version: only as the top-level request — the global --version/-v flag, or
+	// `version` as the first positional command. Matching `version` anywhere
+	// (e.g. as a flag value) would be wrong.
+	for _, arg := range args {
+		if arg == "--version" || arg == "-v" {
+			fmt.Print(versionString())
+			os.Exit(0)
+		}
+		// First non-flag token decides the (sub)command.
+		if !strings.HasPrefix(arg, "-") {
+			if arg == "version" {
+				fmt.Print(versionString())
+				os.Exit(0)
+			}
+			break
+		}
+	}
+}
+
 func main() {
 	// Convert panics from the command logic (e.g. git.GitInterface.MustGit on an
 	// ordinary non-zero git exit) into a clean error + non-zero exit instead of a
@@ -82,6 +134,10 @@ func main() {
 	// Handle internal _edit-sequence command before any git/config initialization.
 	// This is invoked by git as a sequence editor during 'spr edit'.
 	handleEditSequence()
+
+	// Handle informational commands (--version/--help) before init so they work
+	// outside a git repo and without config/token. See handleEarlyExit.
+	handleEarlyExit()
 
 	gitcmd := realgit.NewGitCmd(config.DefaultConfig())
 	//  check that we are inside a git dir
@@ -105,6 +161,25 @@ func main() {
 	ctx := context.Background()
 	client := githubclient.NewGitHubClient(ctx, cfg)
 	stackedpr := spr.NewStackedPR(cfg, client, gitcmd)
+
+	app := newApp(stackedpr, client, cfg)
+	_ = app.Run(os.Args)
+}
+
+// starClient is the subset of the GitHub client that newApp's Before hook uses.
+// It is satisfied by *githubclient.client; declaring it locally lets newApp be
+// invoked with a nil client on the --help-before-init path.
+type starClient interface {
+	MaybeStar(ctx context.Context, cfg *config.Config)
+}
+
+// newApp constructs the urfave/cli application. It is called both from main
+// (with fully-initialized dependencies) and from handleEarlyExit for rendering
+// --help (with nil dependencies — only the static command/flag metadata is read
+// to produce the usage text; no command Action ever runs in that path). The
+// Before/Action hooks guard against nil so the help path is safe.
+func newApp(stackedpr *spr.StackedPR, client starClient, cfgPtr *config.Config) *cli.App {
+	ctx := context.Background()
 
 	detailFlag := &cli.BoolFlag{
 		Name:  "detail",
@@ -138,7 +213,7 @@ VERSION: fork of {{.Version}}
 		Name:                 "spr",
 		Usage:                "Stacked Pull Requests on GitHub",
 		HideVersion:          true,
-		Version:              fmt.Sprintf("%s : %s : %s\n", version, date, truncate(commit, 8)),
+		Version:              versionString(),
 		EnableBashCompletion: true,
 		Authors: []*cli.Author{
 			{
@@ -169,21 +244,26 @@ VERSION: fork of {{.Version}}
 			},
 		},
 		Before: func(c *cli.Context) error {
+			// stackedpr/client/cfgPtr are nil only on the --help-before-init path
+			// (handleEarlyExit); cli still runs Before for --help, so guard them.
+			if stackedpr == nil || client == nil || cfgPtr == nil {
+				return nil
+			}
 			if c.IsSet("debug") {
 				zerolog.SetGlobalLevel(zerolog.DebugLevel)
-				rake.LoadSources(&cfg, rake.DebugWriter(os.Stdout))
+				rake.LoadSources(cfgPtr, rake.DebugWriter(os.Stdout))
 			}
 			if c.IsSet("profile") {
 				stackedpr.ProfilingEnable()
 			}
-			if c.IsSet("detail") || cfg.User.StatusBitsHeader {
+			if c.IsSet("detail") || cfgPtr.User.StatusBitsHeader {
 				stackedpr.DetailEnabled = true
 			}
 			if c.IsSet("verbose") {
-				cfg.User.LogGitCommands = true
-				cfg.User.LogGitHubCalls = true
+				cfgPtr.User.LogGitCommands = true
+				cfgPtr.User.LogGitHubCalls = true
 			}
-			client.MaybeStar(ctx, cfg)
+			client.MaybeStar(ctx, cfgPtr)
 			return nil
 		},
 		Commands: []*cli.Command{
@@ -216,18 +296,23 @@ VERSION: fork of {{.Version}}
 				Aliases: []string{"u", "up"},
 				Usage:   "Update and create pull requests for updated commits in the stack",
 				Before: func(c *cli.Context) error {
+					// cfgPtr is nil only on the --help-before-init path; nothing to
+					// override there (help is about to render).
+					if cfgPtr == nil {
+						return nil
+					}
 					// only override whatever was set in yaml if flag is explicitly present
 					if c.IsSet("no-rebase") {
-						cfg.User.NoRebase = c.Bool("no-rebase")
+						cfgPtr.User.NoRebase = c.Bool("no-rebase")
 					}
 					if c.IsSet("fetch") && c.IsSet("no-fetch") {
 						return fmt.Errorf("cannot use both --fetch and --no-fetch")
 					}
 					if c.IsSet("fetch") {
-						cfg.User.NoFetch = !c.Bool("fetch")
+						cfgPtr.User.NoFetch = !c.Bool("fetch")
 					}
 					if c.IsSet("no-fetch") {
-						cfg.User.NoFetch = c.Bool("no-fetch")
+						cfgPtr.User.NoFetch = c.Bool("no-fetch")
 					}
 					return nil
 				},
@@ -362,12 +447,12 @@ VERSION: fork of {{.Version}}
 			},
 		},
 		After: func(c *cli.Context) error {
-			if c.IsSet("profile") {
+			if stackedpr != nil && c.IsSet("profile") {
 				stackedpr.ProfilingSummary()
 			}
 			return nil
 		},
 	}
 
-	_ = app.Run(os.Args)
+	return app
 }
