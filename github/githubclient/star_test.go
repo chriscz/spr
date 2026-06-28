@@ -312,3 +312,67 @@ func TestMaybeStar_IsStarError_DeclineFirst_AcceptSecond(t *testing.T) {
 	// Second prompt accepted → Stargazer becomes true from the addStar branch.
 	require.True(t, cfg.State.Stargazer, "Stargazer should be true (accepted second prompt)")
 }
+
+// TestMaybeStar_EnterpriseHost_NoPanic is the regression test for issue #386.
+//
+// The star feature stars the upstream "ejoffe/spr" repo, which only exists on
+// public github.com. On a GitHub Enterprise host that repo doesn't resolve, so
+// the API returns "Could not resolve to a Repository with the name 'ejoffe/spr'"
+// and the unguarded addStar → check(err) path panics, aborting the user's
+// actual command (e.g. `git spr status`) with a stack trace.
+//
+// MaybeStar must skip the entire star feature when the configured GitHubHost is
+// not public github.com. The test drives the on-cycle, not-yet-starred path on
+// a GHE host and asserts:
+//   - MaybeStar does not panic,
+//   - no star API call (StarCheck / StarGetRepo / StarAdd) is made,
+//   - no interactive prompt is shown (no stdin is consumed).
+//
+// RED-FOR-THE-RIGHT-REASON: on the unfixed code there is no host guard, so the
+// outer gate (Stargazer=false && RunCount%promptCycle==0) lets execution reach
+// isStar → second prompt → addStar → StarGetRepo, whose faithful GHE error
+// (the exact message from the issue's stack trace) hits check(err) and panics.
+// require.NotPanics converts that panic into a test failure.
+func TestMaybeStar_EnterpriseHost_NoPanic(t *testing.T) {
+	// Silence the prompt output; no stdin is piped because the guarded path must
+	// not read from stdin. If the guard is missing, the (else) prompt block on
+	// the unfixed code reaches addStar and panics in StarGetRepo — a failure.
+	defer silenceStdoutStar(t)()
+
+	cfg := testConfig()
+	// GitHub Enterprise host: the upstream ejoffe/spr repo does not exist here.
+	// A bare suffix match against "github.com" would also misfire here, which is
+	// why the guard uses an exact host comparison.
+	cfg.Repo.GitHubHost = "github.mycorp.com"
+	cfg.State.Stargazer = false
+	cfg.State.RunCount = promptCycle // on-cycle: passes the outer gate
+
+	starCheckCalled := false
+	starGetRepoCalled := false
+	starAddCalled := false
+
+	api := &fakeAPI{
+		starCheck: func(ctx context.Context, after *string) (*genclient.StarCheckResponse, error) {
+			starCheckCalled = true
+			return nil, errors.New("StarCheck should not be called on an enterprise host")
+		},
+		starGetRepo: func(ctx context.Context, owner, name string) (*genclient.StarGetRepoResponse, error) {
+			starGetRepoCalled = true
+			// Faithful to the real GHE GraphQL error from issue #386's stack trace.
+			return nil, errors.New("repository: Could not resolve to a Repository with the name 'ejoffe/spr'.")
+		},
+		starAdd: func(ctx context.Context, input genclient.AddStarInput) (*genclient.StarAddResponse, error) {
+			starAddCalled = true
+			return nil, errors.New("StarAdd should not be called on an enterprise host")
+		},
+	}
+	c := newTestClient(cfg, api)
+
+	require.NotPanics(t, func() {
+		c.MaybeStar(context.Background(), cfg)
+	}, "MaybeStar must not panic on a GitHub Enterprise host (#386)")
+
+	require.False(t, starCheckCalled, "star feature must be skipped on a non-github.com host")
+	require.False(t, starGetRepoCalled, "addStar must not run on a non-github.com host")
+	require.False(t, starAddCalled, "addStar must not run on a non-github.com host")
+}

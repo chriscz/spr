@@ -17,10 +17,22 @@ import (
 const (
 	sprRepoOwner = "ejoffe"
 	sprRepoName  = "spr"
+	sprRepoHost  = "github.com"
 	promptCycle  = 25
 )
 
 func (c *client) MaybeStar(ctx context.Context, cfg *config.Config) {
+	// The star feature stars the upstream ejoffe/spr repo, which only exists on
+	// public github.com. On a GitHub Enterprise host that repo doesn't resolve,
+	// so addStar's StarGetRepo call would fail and panic via check() (#386).
+	// Skip the whole feature on any non-public host. Use an exact host match
+	// (not a "github.com" suffix) so e.g. github.mycorp.com is correctly
+	// treated as enterprise.
+	if cfg.Repo.GitHubHost != sprRepoHost {
+		log.Debug().Str("host", cfg.Repo.GitHubHost).Msg("MaybeStar : skipping star on non-public host")
+		return
+	}
+
 	if !cfg.State.Stargazer && cfg.State.RunCount%promptCycle == 0 {
 		starred, err := c.isStar(ctx)
 		if err != nil {
