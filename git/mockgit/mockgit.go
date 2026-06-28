@@ -131,7 +131,7 @@ func (m *Mock) ExpectEditAbort() {
 }
 
 func (m *Mock) ExpectLogAndRespond(commits []*git.Commit) {
-	m.expect("git log --format=medium --no-color origin/master..HEAD").commitRespond(commits)
+	m.expect("git log --format=medium --no-color --no-abbrev-commit origin/master..HEAD").commitRespond(commits)
 }
 
 func (m *Mock) ExpectStatus() {

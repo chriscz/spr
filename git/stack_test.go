@@ -88,7 +88,7 @@ func commitLogEntry(c Commit) string {
 }
 
 func logCommand(cfg *config.Config) string {
-	return fmt.Sprintf("log --format=medium --no-color %s/%s..HEAD",
+	return fmt.Sprintf("log --format=medium --no-color --no-abbrev-commit %s/%s..HEAD",
 		cfg.Repo.GitHubRemote, cfg.Repo.GitHubBranch)
 }
 
@@ -321,6 +321,60 @@ func TestParseLocalCommitStack_BodyLineAtSubjectPlusOne(t *testing.T) {
 	assert.Equal(t, "Subject line", commits[0].Subject)
 	// The body line at subjectIndex+1 should be captured in Body
 	assert.Contains(t, commits[0].Body, "body line")
+}
+
+// ---------------------------------------------------------------------------
+// parseLocalCommitStack — abbreviated commit hashes (#213)
+//
+// With git config `log.abbrevCommit=true` (or `core.abbrev`) `git log` prints
+// short hashes, e.g. `commit ca06022`.  The old `^commit ([a-f0-9]{40})` regex
+// required exactly 40 hex chars, so nothing matched and spr reported an empty
+// stack.  The parser must accept abbreviated (7..40 char) hashes.
+// ---------------------------------------------------------------------------
+
+func TestParseLocalCommitStack_AbbreviatedHash(t *testing.T) {
+	// `git log` output as emitted with log.abbrevCommit=true: a short 7-char
+	// hash on the `commit ` line (matches the example in the upstream issue).
+	commitLog := `
+commit ca06022
+Author: Test Author <test@example.com>
+Date:   Mon Jan 01 00:00:00 2024 -0700
+
+	abbreviated hash commit
+
+	commit-id:aaaaaaaa
+`
+	commits, valid := parseLocalCommitStack(commitLog)
+	require.True(t, valid, "abbreviated-hash log should parse as valid")
+	require.Len(t, commits, 1, "abbreviated hash must still be recognized as a commit")
+	assert.Equal(t, "ca06022", commits[0].CommitHash)
+	assert.Equal(t, "aaaaaaaa", commits[0].CommitID)
+	assert.Equal(t, "abbreviated hash commit", commits[0].Subject)
+}
+
+// ---------------------------------------------------------------------------
+// GetLocalCommitStack — git invocation immunizes against abbrev config (#213)
+//
+// Relaxing the parse regex alone still leaves spr at the mercy of `core.abbrev`
+// (which can shorten hashes to as few as 4 chars).  GetLocalCommitStack must
+// pass `--no-abbrev-commit` so git always emits full 40-hex hashes regardless
+// of the user's config.
+// ---------------------------------------------------------------------------
+
+func TestGetLocalCommitStack_PassesNoAbbrevCommit(t *testing.T) {
+	cfg := testCfg()
+	c := Commit{CommitHash: "cccccccccccccccccccccccccccccccccccccccc", CommitID: "cccccccc", Subject: "single commit"}
+	sg := &seqGit{
+		t: t,
+		cmds: []fakeCmd{
+			{args: logCommand(cfg), output: commitLogEntry(c)},
+		},
+	}
+	commits := GetLocalCommitStack(cfg, sg)
+	require.Len(t, commits, 1)
+	assert.Contains(t, logCommand(cfg), "--no-abbrev-commit",
+		"the git log command must pass --no-abbrev-commit to immunize against log.abbrevCommit/core.abbrev")
+	sg.expectationsMet()
 }
 
 // ---------------------------------------------------------------------------

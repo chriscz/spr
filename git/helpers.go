@@ -50,7 +50,10 @@ func GetLocalTopCommit(cfg *config.Config, gitcmd GitInterface) *Commit {
 //	the list is ordered with the bottom commit in the stack first
 func GetLocalCommitStack(cfg *config.Config, gitcmd GitInterface) []Commit {
 	var commitLog string
-	logCommand := fmt.Sprintf("log --format=medium --no-color %s/%s..HEAD",
+	// --no-abbrev-commit forces full 40-hex hashes regardless of the user's
+	// log.abbrevCommit / core.abbrev git config; without it short hashes slip
+	// through and the stack parse silently finds no commits (#213).
+	logCommand := fmt.Sprintf("log --format=medium --no-color --no-abbrev-commit %s/%s..HEAD",
 		cfg.Repo.GitHubRemote, cfg.Repo.GitHubBranch)
 	gitcmd.MustGit(logCommand, &commitLog)
 	commits, valid := parseLocalCommitStack(commitLog)
@@ -77,7 +80,11 @@ func GetLocalCommitStack(cfg *config.Config, gitcmd GitInterface) []Commit {
 func parseLocalCommitStack(commitLog string) ([]Commit, bool) {
 	var commits []Commit
 
-	commitHashRegex := regexp.MustCompile(`^commit ([a-f0-9]{40})`)
+	// Accept abbreviated (7..40 hex) hashes as well as full 40-hex ones. spr
+	// passes --no-abbrev-commit so production output is full-length, but git's
+	// core.abbrev minimum is 4 and short hashes must never be silently dropped
+	// (#213). 7 is git's historical default abbreviation length.
+	commitHashRegex := regexp.MustCompile(`^commit ([a-f0-9]{7,40})`)
 	commitIDRegex := regexp.MustCompile(`commit-id\:\s*([a-f0-9]{8})`)
 
 	// The list of commits from the command line actually starts at the
