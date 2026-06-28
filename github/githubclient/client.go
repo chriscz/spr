@@ -200,6 +200,9 @@ func (c *client) GetInfo(ctx context.Context, gitcmd git.GitInterface) *github.G
 			c.config.Repo.GitHubRepoOwner,
 			c.config.Repo.GitHubRepoName)
 		check(err)
+		if resp.Repository == nil {
+			check(errRepoNotResolved(c.config.Repo.GitHubRepoOwner, c.config.Repo.GitHubRepoName))
+		}
 		pullRequestConnection = resp.Viewer.PullRequests
 		loginName = resp.Viewer.Login
 		repoID = resp.Repository.Id
@@ -208,6 +211,9 @@ func (c *client) GetInfo(ctx context.Context, gitcmd git.GitInterface) *github.G
 			c.config.Repo.GitHubRepoOwner,
 			c.config.Repo.GitHubRepoName)
 		check(err)
+		if resp.Repository == nil {
+			check(errRepoNotResolved(c.config.Repo.GitHubRepoOwner, c.config.Repo.GitHubRepoName))
+		}
 		pullRequestConnection = resp.Viewer.PullRequests
 		loginName = resp.Viewer.Login
 		repoID = resp.Repository.Id
@@ -842,6 +848,22 @@ func computeRequiredCheckStatus(contexts []checkContextNode, requiredChecks map[
 	return github.CheckStatusPass
 }
 
+// osExit is a seam over os.Exit so the clean-exit paths in check() are testable
+// without terminating the test process.
+var osExit = os.Exit
+
+// repoNotResolvedMarker tags errors that mean "GitHub returned a null Repository
+// node" so check() can present a clean, actionable message instead of letting a
+// nil-pointer dereference crash spr with a SIGSEGV stack trace.
+const repoNotResolvedMarker = "github repository could not be resolved"
+
+// errRepoNotResolved builds the error raised when a GitHub response carries a
+// null Repository node (auth/token not resolved, repo not found, owner/host
+// mismatch, GitHub Enterprise quirks, etc).
+func errRepoNotResolved(owner, name string) error {
+	return fmt.Errorf("%s: %s/%s", repoNotResolvedMarker, owner, name)
+}
+
 func check(err error) {
 	if err != nil {
 		msg := err.Error()
@@ -850,7 +872,14 @@ func check(err error) {
 			errmsg += " make sure GITHUB_TOKEN env variable is set with a valid token\n"
 			errmsg += " to create a valid token goto: https://github.com/settings/tokens\n"
 			fmt.Fprint(os.Stderr, errmsg)
-			os.Exit(-1)
+			osExit(-1)
+		} else if strings.Contains(msg, repoNotResolvedMarker) {
+			errmsg := "error : " + msg + "\n"
+			errmsg += " github returned an empty repository - spr could not resolve it.\n"
+			errmsg += " check that you are authenticated (GITHUB_TOKEN / gh auth) and that\n"
+			errmsg += " the configured githubHost / repo owner / repo name are correct.\n"
+			fmt.Fprint(os.Stderr, errmsg)
+			osExit(-1)
 		} else {
 			panic(err)
 		}
