@@ -4,3 +4,4 @@ result
 coverage.txt
 coverage.out
 .coverdata/
+.claude/worktrees/
