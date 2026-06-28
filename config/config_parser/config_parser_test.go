@@ -120,6 +120,18 @@ func TestGetRepoDetailsFromRemote(t *testing.T) {
 
 		// GitHub names are case-sensitive
 		{"origin  https://github.com/R2/D2.git (push)", "github.com", "R2", "D2", true},
+
+		// GitHub allows "." in repo names (issue #431). The optional ".git"
+		// suffix must NOT be swallowed into the repo name when a "." is present.
+		{"origin  https://github.com/r2/my.repo (push)", "github.com", "r2", "my.repo", true},
+		{"origin  https://github.com/r2/my.repo.git (push)", "github.com", "r2", "my.repo", true},
+		{"origin  ssh://git@github.com/r2/my.repo.git (push)", "github.com", "r2", "my.repo", true},
+		{"origin  git@github.com:r2/my.repo.git (push)", "github.com", "r2", "my.repo", true},
+		{"origin  git@github.com:r2/my.repo (push)", "github.com", "r2", "my.repo", true},
+		{"origin  git@gh.enterprise.com:r2/a.b.c.git (push)", "gh.enterprise.com", "r2", "a.b.c", true},
+		// A repo literally named "spr.git" (trailing ".git" plus suffix) must
+		// strip only the suffix, not the name.
+		{"origin  https://github.com/r2/spr.git.git (push)", "github.com", "r2", "spr.git", true},
 	}
 	for i, testCase := range testCases {
 		t.Logf("Testing %v %q", i, testCase.remote)
