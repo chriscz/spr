@@ -19,8 +19,17 @@ jobs:
     - name: Lint
       run: golangci-lint run
 
-    - name: Test
-      run: go test -race -coverprofile=./coverage.txt -covermode=atomic ./...
+    - name: Test (with covdata)
+      run: |
+        rm -rf .coverdata
+        mkdir -p .coverdata/unit .coverdata/e2e .coverdata/merged
+        SPR_E2E_COVERDIR=$GITHUB_WORKSPACE/.coverdata/e2e \
+          go test -race -covermode=atomic ./... -args -test.gocoverdir=$GITHUB_WORKSPACE/.coverdata/unit
+        # The e2e harness writes covdata into unique run-* subdirs of
+        # .coverdata/e2e; covdata is not recursive, so enumerate the leaf dirs.
+        E2E_DIRS=$(find $GITHUB_WORKSPACE/.coverdata/e2e -name 'covmeta.*' -exec dirname {} \; | sort -u | tr '\n' ',')
+        go tool covdata merge -i=$GITHUB_WORKSPACE/.coverdata/unit,$E2E_DIRS -o=$GITHUB_WORKSPACE/.coverdata/merged
+        go tool covdata textfmt -i=$GITHUB_WORKSPACE/.coverdata/merged -o=coverage.txt
 
     - name: Coverage gate
       run: go-test-coverage --config=.testcoverage.yml

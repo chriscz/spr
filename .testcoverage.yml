@@ -13,3 +13,4 @@ exclude:
   paths:
     - github/githubclient/gen/genclient
     - github/githubclient/fezzik_types
+    - internal/e2e
