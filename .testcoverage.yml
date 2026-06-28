@@ -1,24 +1,20 @@
 profile: coverage.txt
 threshold:
-  total: 85     # Phase 3 INTERIM floor. Phase 2 measured 90.3% over the
-                # tested-packages denominator; Phase 3 switched to the covdata
-                # pipeline which pulls the cmd/spr binary (run by the e2e smoke
-                # test) into the denominator at low coverage, re-baselining the
-                # honest total to 85.5%. As Phase 3 Tasks 1-5 add coverage this
-                # rises again; Task 6 ratchets it back to its final floor.
-  file: 70      # real per-file anti-rot floor (every covered file is >=75% now,
-                # except the overrides below). Numbers only go up from here.
+  total: 90     # Phase 3 final floor (measured 90.1% over the covdata denominator,
+                # which includes the cmd/spr + cmd/amend binaries exercised by the
+                # internal/e2e scenarios). Numbers only go up from here.
+  file: 70      # real per-file anti-rot floor. Every measured file is >=70% except
+                # the override below (cmd/spr/main.go, network-bound CLI wiring).
 # Per-file overrides for files whose remainder is a recorded deferred gap
 # (see docs/superpowers/specs/2026-06-27-phase2-known-failures.md). Not an
 # exclusion — the file is still measured, just held to its honest current floor.
 override:
-  - threshold: 45   # star.go: MaybeStar's os.Stdin prompt paths (DG-P01-4) are
-    path: github/githubclient/star\.go$
-  - threshold: 20   # cmd/spr/main.go: INTERIM. Network-bound CLI wiring; only
-                    # _edit-sequence is covered by the e2e smoke test so far
-                    # (DG-CMDSPR-1). Phase 3 Task 4 e2e scenarios raise this
-                    # (--help covers the cli.App literal; negative scenarios
-                    # cover the os.Exit guards); Task 6 sets the final floor.
+  - threshold: 45   # cmd/spr/main.go: measured 50.0%. The e2e scenarios cover the
+                    # whole cli.App{} wiring, handleEditSequence, and the NewGitCmd/
+                    # ParseConfig/NewGitHubClient os.Exit guards; the residual is the
+                    # subcommand Action func bodies that call GitHub (network-only) —
+                    # DG-CMDSPR-1. The delegate logic they call is ~99% covered in
+                    # package spr.
     path: cmd/spr/main\.go$
 exclude:
   paths:
