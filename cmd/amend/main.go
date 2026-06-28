@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/ejoffe/spr/cmd/internal/cliexit"
 	"github.com/ejoffe/spr/config"
 	"github.com/ejoffe/spr/config/config_parser"
 	"github.com/ejoffe/spr/git/realgit"
@@ -34,6 +35,12 @@ func init() {
 }
 
 func main() {
+	// Convert panics from the command logic (e.g. git.GitInterface.MustGit on an
+	// ordinary non-zero git exit) into a clean error + non-zero exit instead of a
+	// Go goroutine stack trace. The trace is still shown with --debug or
+	// SPR_DEBUG=1 so real bugs stay debuggable.
+	defer cliexit.HandlePanic()
+
 	var opts opts
 	_, err := flags.Parse(&opts)
 	check(err)
