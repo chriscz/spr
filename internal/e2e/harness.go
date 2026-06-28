@@ -143,8 +143,18 @@ func coverDir(t *testing.T) string {
 // specific exit codes themselves.
 func Run(t *testing.T, bin string, env []string, args ...string) (stdout, stderr string, exitCode int) {
 	t.Helper()
+	return RunInDir(t, "", bin, env, args...)
+}
+
+// RunInDir is like Run but runs the subprocess with its working directory set to
+// dir (so scenarios can run the binary inside a specific git repo, or inside a
+// non-repo directory). If dir is empty the subprocess inherits the test's CWD,
+// preserving Run's original behaviour. GOCOVERDIR is injected exactly as Run does.
+func RunInDir(t *testing.T, dir, bin string, env []string, args ...string) (stdout, stderr string, exitCode int) {
+	t.Helper()
 
 	cmd := exec.Command(bin, args...)
+	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), env...)
 	cmd.Env = append(cmd.Env, "GOCOVERDIR="+coverDir(t))
 
