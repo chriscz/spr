@@ -190,6 +190,96 @@ func TestGitWithEditor_Success(t *testing.T) {
 	assert.Len(t, out, 40)
 }
 
+// stageAutosquashRebase prepares an autosquash rebase scenario in a temp repo:
+// two real commits plus a `fixup!` commit targeting the first, so that
+// `git rebase -i --autosquash` has a todo that git must process through the
+// configured sequence/commit editor. This mirrors what spr.AmendCommit drives.
+func stageAutosquashRebase(t *testing.T) string {
+	t.Helper()
+	tmp := initTempRepo(t)
+
+	run := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = tmp
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, out)
+		return strings.TrimSpace(string(out))
+	}
+
+	// initTempRepo already made an "init" commit. Add a second real commit,
+	// then a fixup! of it so autosquash has work to do.
+	require.NoError(t, os.WriteFile(filepath.Join(tmp, "README"), []byte("hello\nworld\n"), 0o600))
+	run("add", "README")
+	run("commit", "-m", "second")
+	target := run("rev-parse", "HEAD")
+
+	require.NoError(t, os.WriteFile(filepath.Join(tmp, "README"), []byte("hello\nworld\nagain\n"), 0o600))
+	run("add", "README")
+	run("commit", "--fixup", target)
+
+	return tmp
+}
+
+// TestGit_AutosquashRebaseUsesResolvableEditor is the regression test for
+// issue #362: the no-op rebase editor must not be a hardcoded absolute path
+// (`/usr/bin/true`) that is absent on systems where `true` is only a shell
+// builtin (zsh / minimal images). When git has to launch the editor for an
+// autosquash rebase and that absolute path does not exist, git aborts with
+// "unable to start editor" and spr panics.
+//
+// The test drives a real `git rebase -i --autosquash` through gitcmd.Git (the
+// exact path AmendCommit uses) and proves the discriminator both ways:
+//   - pre-fix behaviour (an absolute editor path that does not exist) is RED:
+//     git fails with "unable to start editor", reproducing the bug;
+//   - the production editor (gitNoopEditor) is GREEN: the rebase completes.
+func TestGit_AutosquashRebaseUsesResolvableEditor(t *testing.T) {
+	const rebaseCmd = "rebase -i --autosquash --autostash HEAD~2"
+
+	// Silence the "git error: …" stderr that Git prints on failure.
+	origStderr := os.Stderr
+	devnull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
+	require.NoError(t, err)
+	os.Stderr = devnull
+	defer func() {
+		os.Stderr = origStderr
+		devnull.Close()
+	}()
+
+	// RED proof: a hardcoded absolute editor path that does not exist (exactly
+	// the failure mode of /usr/bin/true on a zsh-builtin-only host) makes the
+	// autosquash rebase abort. This is what the bug looks like.
+	t.Run("absent absolute editor path aborts the rebase (the bug)", func(t *testing.T) {
+		tmp := stageAutosquashRebase(t)
+		gc := newTestGitCmd(t, tmp)
+
+		absent := filepath.Join(t.TempDir(), "nonexistent", "true")
+		defer swapNoopEditor(absent)()
+
+		err := gc.Git(rebaseCmd, nil)
+		require.Error(t, err, "an absent absolute editor path must make the autosquash rebase fail")
+	})
+
+	// GREEN proof: the production no-op editor (gitNoopEditor) completes the
+	// autosquash rebase. With the hardcoded "/usr/bin/true" this fails wherever
+	// that file is absent; "/usr/bin/env true" resolves `true` via PATH instead.
+	t.Run("production no-op editor completes the rebase", func(t *testing.T) {
+		tmp := stageAutosquashRebase(t)
+		gc := newTestGitCmd(t, tmp)
+
+		err := gc.Git(rebaseCmd, nil)
+		require.NoError(t, err, "production no-op editor must complete the autosquash rebase")
+	})
+}
+
+// swapNoopEditor temporarily overrides the package no-op editor and returns a
+// restore func (defer it). Test-only.
+func swapNoopEditor(v string) func() {
+	prev := gitNoopEditor
+	gitNoopEditor = v
+	return func() { gitNoopEditor = prev }
+}
+
 // ── MustGit ───────────────────────────────────────────────────────────────────
 
 func TestMustGit_Success(t *testing.T) {

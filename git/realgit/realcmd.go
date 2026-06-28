@@ -60,8 +60,16 @@ type gitcmd struct {
 	rootdir string
 }
 
+// gitNoopEditor is the no-op editor used for non-interactive git operations
+// (e.g. the autosquash rebase behind `git amend`). It must resolve `true` via
+// PATH ("/usr/bin/env true") rather than hardcoding "/usr/bin/true": on systems
+// where `true` is only a shell builtin (zsh / minimal images) the file
+// /usr/bin/true is absent, and git aborts the rebase with
+// "cannot run /usr/bin/true". See issue #362.
+var gitNoopEditor = "/usr/bin/env true"
+
 func (c *gitcmd) Git(argStr string, output *string) error {
-	return c.GitWithEditor(argStr, output, "/usr/bin/true")
+	return c.GitWithEditor(argStr, output, gitNoopEditor)
 }
 
 func (c *gitcmd) MustGit(argStr string, output *string) {
