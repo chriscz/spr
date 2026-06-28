@@ -287,6 +287,28 @@ func TestEditWithEditor_ErrorPath(t *testing.T) {
 	assert.Contains(t, err.Error(), "editor command failed")
 }
 
+func TestEditWithEditor_DefaultsToVi(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping editor subprocess test in short mode")
+	}
+	// Ensure EDITOR is empty so the default-"vi" branch is taken.
+	t.Setenv("EDITOR", "")
+
+	// Create a fake `vi` on a temp PATH dir.
+	binDir := t.TempDir()
+	fakeVi := filepath.Join(binDir, "vi")
+	// Writes a known marker into the file passed as $1, then exits 0.
+	script := "#!/bin/sh\nprintf 'EDITED_BY_FAKE_VI\\n' > \"$1\"\n"
+	require.NoError(t, os.WriteFile(fakeVi, []byte(script), 0o755))
+
+	// Prepend binDir to PATH so exec.Command("vi", ...) finds our fake.
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	got, err := EditWithEditor("initial content")
+	require.NoError(t, err)
+	assert.Equal(t, "EDITED_BY_FAKE_VI\n", got)
+}
+
 // ---------------------------------------------------------------------------
 // getSectionOfPRTemplate — error branches (callable from internal test package)
 // ---------------------------------------------------------------------------
