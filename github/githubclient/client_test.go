@@ -518,6 +518,100 @@ func TestMatchPullRequestStack(t *testing.T) {
 				},
 			},
 		},
+		{
+			// Reordering the local commits (e.g. via `git rebase -i`) leaves the
+			// remote PR base-branch chain unchanged: it is still 1<-2<-3 with PR 1
+			// rooted on master. The matcher must walk that remote chain and return
+			// the whole stack, not assume the topmost *local* commit is the top of
+			// the remote stack. Here the bottom commit (1) was moved to the top, so
+			// starting the walk from it would stop immediately at master and drop
+			// PRs 2 and 3 - which then makes spr try to recreate already-existing
+			// PRs and panic. Regression test for issue #425 (linked #385).
+			name: "ReorderCommits",
+			commits: []git.Commit{
+				{CommitID: "00000002"},
+				{CommitID: "00000003"},
+				{CommitID: "00000001"},
+			},
+			prs: fezzik_types.PullRequestConnection{
+				Nodes: &fezzik_types.PullRequestsViewerPullRequestsNodes{
+					{
+						Id:          "1",
+						HeadRefName: "spr/master/00000001",
+						BaseRefName: "master",
+						Commits: fezzik_types.PullRequestsViewerPullRequestsNodesCommits{
+							Nodes: &fezzik_types.PullRequestsViewerPullRequestsNodesCommitsNodes{
+								{
+									fezzik_types.PullRequestsViewerPullRequestsNodesCommitsNodesCommit{Oid: "1"},
+								},
+							},
+						},
+					},
+					{
+						Id:          "2",
+						HeadRefName: "spr/master/00000002",
+						BaseRefName: "spr/master/00000001",
+						Commits: fezzik_types.PullRequestsViewerPullRequestsNodesCommits{
+							Nodes: &fezzik_types.PullRequestsViewerPullRequestsNodesCommitsNodes{
+								{
+									fezzik_types.PullRequestsViewerPullRequestsNodesCommitsNodesCommit{Oid: "2"},
+								},
+							},
+						},
+					},
+					{
+						Id:          "3",
+						HeadRefName: "spr/master/00000003",
+						BaseRefName: "spr/master/00000002",
+						Commits: fezzik_types.PullRequestsViewerPullRequestsNodesCommits{
+							Nodes: &fezzik_types.PullRequestsViewerPullRequestsNodesCommitsNodes{
+								{
+									fezzik_types.PullRequestsViewerPullRequestsNodesCommitsNodesCommit{Oid: "3"},
+								},
+							},
+						},
+					},
+				},
+			},
+			expect: []*github.PullRequest{
+				{
+					ID:         "1",
+					FromBranch: "spr/master/00000001",
+					ToBranch:   "master",
+					Commit: git.Commit{
+						CommitID:   "00000001",
+						CommitHash: "1",
+					},
+					MergeStatus: github.PullRequestMergeStatus{
+						ChecksPass: github.CheckStatusPass,
+					},
+				},
+				{
+					ID:         "2",
+					FromBranch: "spr/master/00000002",
+					ToBranch:   "spr/master/00000001",
+					Commit: git.Commit{
+						CommitID:   "00000002",
+						CommitHash: "2",
+					},
+					MergeStatus: github.PullRequestMergeStatus{
+						ChecksPass: github.CheckStatusPass,
+					},
+				},
+				{
+					ID:         "3",
+					FromBranch: "spr/master/00000003",
+					ToBranch:   "spr/master/00000002",
+					Commit: git.Commit{
+						CommitID:   "00000003",
+						CommitHash: "3",
+					},
+					MergeStatus: github.PullRequestMergeStatus{
+						ChecksPass: github.CheckStatusPass,
+					},
+				},
+			},
+		},
 	}
 
 	for _, tc := range tests {

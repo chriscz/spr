@@ -339,13 +339,48 @@ func matchPullRequestStack(
 
 	var pullRequests []*github.PullRequest
 
-	// find top pr
+	// Find the top of the remote stack to start the walk from.
+	//
+	// We can't assume the topmost *local* commit is the top of the remote
+	// stack: after a reorder (e.g. `git rebase -i`) the local commit order
+	// diverges from the remote PR base-branch chain, which still reflects the
+	// previous order. Starting the walk from the topmost local commit's PR
+	// would, in that case, begin at a PR somewhere in the middle (or bottom)
+	// of the remote chain and stop early at the target branch, dropping the
+	// PRs above it. Those dropped PRs are then treated as new commits and spr
+	// tries to recreate already-existing PRs -> "a pull request already
+	// exists" panic (issue #425, linked #385).
+	//
+	// Instead, among the PRs that correspond to a local commit, pick the one
+	// furthest from the target branch along the remote base chain (its head).
+	// This is robust to reorders (where the remote chain disagrees with the
+	// local order) while still matching the topmost local PR when the orders
+	// agree. The depth walk follows the real remote base links, so it also
+	// steps over PRs whose local commit was removed but which still connect
+	// the stack (a removed middle commit).
+	remoteDepth := func(pr *github.PullRequest) int {
+		depth := 0
+		for pr != nil && depth <= len(pullRequestMap) {
+			depth++
+			if pr.ToBranch == targetBranch {
+				break
+			}
+			matches := git.BranchNameRegex(branchPrefix).FindStringSubmatch(pr.ToBranch)
+			if matches == nil {
+				break
+			}
+			pr = pullRequestMap[matches[2]]
+		}
+		return depth
+	}
 	var currpr *github.PullRequest
-	var found bool
-	for i := len(localCommitStack) - 1; i >= 0; i-- {
-		currpr, found = pullRequestMap[localCommitStack[i].CommitID]
-		if found {
-			break
+	maxDepth := 0
+	for _, commit := range localCommitStack {
+		if pr, ok := pullRequestMap[commit.CommitID]; ok {
+			if d := remoteDepth(pr); d > maxDepth {
+				maxDepth = d
+				currpr = pr
+			}
 		}
 	}
 
